@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
-DEFAULT_MODEL = "openai/gpt-oss-20b:free"
+DEFAULT_MODEL = "nvidia/nemotron-3-nano-30b-a3b:free"
 
 
 class OpenRouterError(Exception):
@@ -52,9 +52,16 @@ def call_openrouter(prompt: str, model: str = DEFAULT_MODEL, timeout: int = 30) 
 
     try:
         data = response.json()
-        return data["choices"][0]["message"]["content"]
+        content = data["choices"][0]["message"]["content"]
     except (KeyError, IndexError, ValueError) as e:
         raise OpenRouterError(f"OpenRouter 응답 형식이 예상과 다릅니다: {e} / raw={response.text}")
+
+    if not content:
+        raise OpenRouterError(
+            f"OpenRouter 응답에 content가 비어 있습니다 (모델이 reasoning만 반환하고 "
+            f"실제 답변은 생성하지 않았을 수 있음): raw={response.text}"
+        )
+    return content
 
 
 if __name__ == "__main__":
