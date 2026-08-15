@@ -1,0 +1,20 @@
+[project]
+name = "mogrid"
+version = "0.1.0"
+description = "무료 LLM API 여러 개를 폴백으로 묶어 파일을 읽고 쓰는 에이전틱 CLI 도구"
+requires-python = ">=3.10"
+dependencies = [
+    "requests",
+    "python-dotenv",
+]
+
+[project.scripts]
+mogrid = "main:main"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["main"]
+packages = ["agent_loop", "router", "tools"]
