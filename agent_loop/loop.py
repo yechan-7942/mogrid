@@ -3,7 +3,7 @@ import json
 from router.fallback import call_llm
 from tools.registry import TOOL_SCHEMAS, ToolError, call_tool
 
-MAX_STEPS = 6
+MAX_STEPS = 8
 
 
 class AgentLoopError(Exception):
@@ -24,7 +24,19 @@ def build_system_prompt() -> str:
         "list_files(path='.')로 현재 위치부터 확인해라.\n"
         "- 작업 설명에 등장하는 프로젝트/폴더 이름을 실제 경로의 일부라고 가정하지 마라.\n"
         "- 같은 경로가 이미 실패했다면 그 경로를 다시 시도하지 말고, "
-        "지금까지의 기록을 참고해 다른 경로를 시도해라.\n\n"
+        "지금까지의 기록을 참고해 다른 경로를 시도해라.\n"
+        "- 파일이 어느 폴더에 있는지 몰라서 여러 폴더를 돌아다니며 찾아야 할 것 같으면, "
+        "list_files를 반복 호출하지 말고 search_files(keyword)로 한 번에 찾아라.\n"
+        "- 기존 파일의 내용을 유지한 채로 뒤에 내용을 덧붙여야 하면 write_file이 아니라 "
+        "append_file을 사용해라. write_file은 기존 내용을 완전히 지우고 덮어쓴다.\n"
+        "- 존재하지 않는 폴더 경로에 파일을 쓰려고 하면 먼저 make_dir로 폴더를 만든 뒤 "
+        "write_file/append_file을 사용해라.\n"
+        "- 작업 설명에 없는 폴더 구조를 임의로 새로 만들지 마라. 특히 파일 경로가 이미 "
+        "명확히 주어졌다면 make_dir를 쓰지 말고 그 경로에 바로 써라.\n"
+        "- 이미 필요한 정보를 다 확인했다면 (예: 파일이 존재하지 않는다는 것을 확인한 "
+        "경우 포함) 같은 조사를 반복하지 말고 즉시 최종 답변으로 보고해라.\n"
+        "- 바로 직전 스텝과 완전히 동일한 tool/args를 다시 호출하지 마라. 이미 그 결과를 "
+        "알고 있으니 기록을 참고해서 다음 행동을 결정해라.\n\n"
         "매 턴마다 반드시 아래 두 형식 중 하나로만, JSON 객체 하나만 응답해라. "
         "설명이나 다른 텍스트를 절대 덧붙이지 마라.\n"
         '1) tool 호출: {"tool": "<tool 이름>", "args": {...}}\n'
@@ -43,16 +55,20 @@ def extract_json(text: str) -> dict:
         raise AgentLoopError(f"모델 응답 JSON 파싱 실패: {e} / raw={text}")
 
 
-def run_agent(task: str, max_steps: int = MAX_STEPS) -> str:
+def run_agent(
+    task: str, max_steps: int = MAX_STEPS, session_history: list[str] | None = None
+) -> str:
     system_prompt = build_system_prompt()
     history = []
+    session_text = "\n\n".join(session_history) if session_history else "(없음)"
 
     for step in range(1, max_steps + 1):
         history_text = "\n".join(history) if history else "(없음)"
         prompt = (
             f"{system_prompt}\n"
-            f"작업: {task}\n\n"
-            f"지금까지 기록:\n{history_text}\n\n"
+            f"이 세션에서 이전에 완료한 작업들:\n{session_text}\n\n"
+            f"이번 작업: {task}\n\n"
+            f"이번 작업 안에서 지금까지 기록:\n{history_text}\n\n"
             "다음 행동을 JSON으로 응답해라."
         )
 
@@ -76,9 +92,3 @@ def run_agent(task: str, max_steps: int = MAX_STEPS) -> str:
         raise AgentLoopError(f"모델 응답에 'tool'도 'final'도 없습니다: {parsed}")
 
     raise AgentLoopError(f"{max_steps}스텝 안에 최종 답변을 받지 못했습니다.")
-
-
-if __name__ == "__main__":
-    result = run_agent("mogrid 프로젝트의 CLAUDE.md 파일 내용을 읽어서 한 문장으로 요약해줘.")
-    print("=== 최종 결과 ===")
-    print(result)

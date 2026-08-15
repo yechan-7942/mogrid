@@ -1,9 +1,11 @@
 from router.gemini_client import GeminiError, call_gemini
 from router.groq_client import GroqError, call_groq
+from router.openrouter_client import OpenRouterError, call_openrouter
 
 PROVIDERS = [
     ("groq", call_groq, GroqError),
     ("gemini", call_gemini, GeminiError),
+    ("openrouter", call_openrouter, OpenRouterError),
 ]
 
 
