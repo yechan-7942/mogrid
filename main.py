@@ -2,7 +2,7 @@ import argparse
 import sys
 
 from agent_loop.loop import AgentLoopError, run_agent
-from agent_loop.session import SessionError, load_session, save_session
+from agent_loop.session import SessionError, load_session, save_session, trim_session
 
 
 def run_task(task: str, session_history: list[str]) -> str | None:
@@ -55,6 +55,7 @@ def run_interactive() -> None:
         result = run_task(task, session_history)
         if result is not None:
             session_history.append(f"작업: {task}\n결과: {result}")
+            session_history = trim_session(session_history)
             save_session_safely(session_history)
 
 
@@ -76,6 +77,7 @@ def main() -> None:
         result = run_task(args.task, session_history)
         if result is not None:
             session_history.append(f"작업: {args.task}\n결과: {result}")
+            session_history = trim_session(session_history)
             save_session_safely(session_history)
     else:
         run_interactive()
