@@ -2,6 +2,7 @@ import json
 
 from agent_loop.text_utils import cap_entries
 from router.fallback import call_llm
+from tools.exec_tools import kill_all_processes
 from tools.registry import TOOL_SCHEMAS, ToolError, call_tool
 
 MAX_STEPS = 25
@@ -48,7 +49,13 @@ def build_system_prompt() -> str:
         "않은 명령어라는 에러가 오면 다른 명령어로 우회하려 하지 말고 그 사실을 최종 답변에 "
         "보고해라.\n"
         "- run_command 실행 결과에 exit code가 0이 아니거나 stderr가 있으면 실패로 간주하고, "
-        "출력 내용을 근거로 원인을 파악해 다음 행동(파일 수정, 재실행 등)을 결정해라.\n\n"
+        "출력 내용을 근거로 원인을 파악해 다음 행동(파일 수정, 재실행 등)을 결정해라.\n"
+        "- 서버 실행, watch 모드처럼 스스로 끝나지 않고 계속 떠 있어야 하는 명령은 "
+        "run_command로 실행하지 마라. run_command는 명령이 끝날 때까지 기다리는 구조라 "
+        "타임아웃으로 항상 실패한다. 이런 경우 start_process를 사용해라.\n"
+        "- start_process로 띄운 뒤에는 바로 성공이라고 보고하지 마라. 필요하면 잠시 후 "
+        "check_process로 아직 살아있는지/무슨 출력이 났는지 확인하고, curl 등으로 실제 "
+        "응답을 확인해라. 확인이 끝났으면 반드시 stop_process로 종료해라.\n\n"
         "매 턴마다 반드시 아래 두 형식 중 하나로만, JSON 객체 하나만 응답해라. "
         "설명이나 다른 텍스트를 절대 덧붙이지 마라.\n"
         '1) tool 호출: {"tool": "<tool 이름>", "args": {...}}\n'
@@ -74,34 +81,39 @@ def run_agent(
     history = []
     session_text = "\n\n".join(session_history) if session_history else "(없음)"
 
-    for step in range(1, max_steps + 1):
-        history_text = "\n".join(history) if history else "(없음)"
-        prompt = (
-            f"{system_prompt}\n"
-            f"이 세션에서 이전에 완료한 작업들:\n{session_text}\n\n"
-            f"이번 작업: {task}\n\n"
-            f"이번 작업 안에서 지금까지 기록:\n{history_text}\n\n"
-            "다음 행동을 JSON으로 응답해라."
-        )
+    try:
+        for step in range(1, max_steps + 1):
+            history_text = "\n".join(history) if history else "(없음)"
+            prompt = (
+                f"{system_prompt}\n"
+                f"이 세션에서 이전에 완료한 작업들:\n{session_text}\n\n"
+                f"이번 작업: {task}\n\n"
+                f"이번 작업 안에서 지금까지 기록:\n{history_text}\n\n"
+                "다음 행동을 JSON으로 응답해라."
+            )
 
-        raw_response = call_llm(prompt)
-        parsed = extract_json(raw_response)
+            raw_response = call_llm(prompt)
+            parsed = extract_json(raw_response)
 
-        if "final" in parsed:
-            return parsed["final"]
+            if "final" in parsed:
+                return parsed["final"]
 
-        if "tool" in parsed:
-            tool_name = parsed["tool"]
-            tool_args = parsed.get("args", {})
-            print(f"[agent_loop] step {step}: {tool_name}({tool_args}) 호출")
-            try:
-                result = call_tool(tool_name, tool_args)
-            except ToolError as e:
-                result = f"에러: {e}"
-            history.append(f"[{step}] tool={tool_name} args={tool_args} -> {result}")
-            history = cap_entries(history, MAX_HISTORY_ENTRIES, MAX_HISTORY_ENTRY_CHARS)
-            continue
+            if "tool" in parsed:
+                tool_name = parsed["tool"]
+                tool_args = parsed.get("args", {})
+                print(f"[agent_loop] step {step}: {tool_name}({tool_args}) 호출")
+                try:
+                    result = call_tool(tool_name, tool_args)
+                except ToolError as e:
+                    result = f"에러: {e}"
+                history.append(f"[{step}] tool={tool_name} args={tool_args} -> {result}")
+                history = cap_entries(history, MAX_HISTORY_ENTRIES, MAX_HISTORY_ENTRY_CHARS)
+                continue
 
-        raise AgentLoopError(f"모델 응답에 'tool'도 'final'도 없습니다: {parsed}")
+            raise AgentLoopError(f"모델 응답에 'tool'도 'final'도 없습니다: {parsed}")
 
-    raise AgentLoopError(f"{max_steps}스텝 안에 최종 답변을 받지 못했습니다.")
+        raise AgentLoopError(f"{max_steps}스텝 안에 최종 답변을 받지 못했습니다.")
+    finally:
+        # 모델이 start_process로 띄운 서버를 stop_process로 못 끄고 작업이 끝나도
+        # (성공/에러/스텝초과 무관) 프로세스가 고아로 남지 않게 항상 정리한다.
+        kill_all_processes()
