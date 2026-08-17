@@ -1,6 +1,8 @@
 import json
 import os
 
+from agent_loop.text_utils import cap_entries
+
 SESSION_FILE = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".mogrid_session.json"
 )
@@ -16,11 +18,7 @@ class SessionError(Exception):
 
 
 def trim_session(entries: list[str]) -> list[str]:
-    capped = [
-        entry if len(entry) <= MAX_ENTRY_CHARS else entry[:MAX_ENTRY_CHARS] + " …(생략됨)"
-        for entry in entries
-    ]
-    return capped[-MAX_SESSION_ENTRIES:]
+    return cap_entries(entries, MAX_SESSION_ENTRIES, MAX_ENTRY_CHARS)
 
 
 def load_session(path: str = SESSION_FILE) -> list[str]:

@@ -84,6 +84,26 @@ class RunAgentTests(unittest.TestCase):
         self.assertIn("이전 작업", prompt)
         self.assertIn("이전 결과", prompt)
 
+    @patch("agent_loop.loop.call_tool")
+    @patch("agent_loop.loop.call_llm")
+    def test_in_task_history_is_capped_to_recent_entries(self, mock_call_llm, mock_call_tool):
+        # MAX_STEPS를 올리면서 history도 같이 캡을 씌웠으므로, 오래된 스텝은
+        # 프롬프트에서 빠지고 최근 스텝만 남는지 확인한다.
+        with patch("agent_loop.loop.MAX_HISTORY_ENTRIES", 2):
+            mock_call_llm.side_effect = [
+                json.dumps({"tool": "list_files", "args": {"path": "1"}}),
+                json.dumps({"tool": "list_files", "args": {"path": "2"}}),
+                json.dumps({"tool": "list_files", "args": {"path": "3"}}),
+                json.dumps({"final": "완료"}),
+            ]
+            mock_call_tool.return_value = "ok"
+
+            run_agent("여러 스텝 작업", max_steps=10)
+
+            last_prompt = mock_call_llm.call_args.args[0]
+            self.assertNotIn("'path': '1'", last_prompt)
+            self.assertIn("'path': '3'", last_prompt)
+
 
 if __name__ == "__main__":
     unittest.main()

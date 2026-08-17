@@ -1,9 +1,15 @@
 import json
 
+from agent_loop.text_utils import cap_entries
 from router.fallback import call_llm
 from tools.registry import TOOL_SCHEMAS, ToolError, call_tool
 
-MAX_STEPS = 8
+MAX_STEPS = 25
+# run_command 등 tool 결과가 길어질 수 있어, session_history와 같은 이유로
+# 이번 작업 안의 history도 개수/길이를 캡 씌운다 (그렇지 않으면 스텝이 늘어날수록
+# 매 프롬프트에 재삽입되는 history가 무한정 커져 컨텍스트/rate limit을 넘길 수 있다).
+MAX_HISTORY_ENTRIES = 15
+MAX_HISTORY_ENTRY_CHARS = 3000
 
 
 class AgentLoopError(Exception):
@@ -93,6 +99,7 @@ def run_agent(
             except ToolError as e:
                 result = f"에러: {e}"
             history.append(f"[{step}] tool={tool_name} args={tool_args} -> {result}")
+            history = cap_entries(history, MAX_HISTORY_ENTRIES, MAX_HISTORY_ENTRY_CHARS)
             continue
 
         raise AgentLoopError(f"모델 응답에 'tool'도 'final'도 없습니다: {parsed}")
