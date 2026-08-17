@@ -1,3 +1,4 @@
+from tools.exec_tools import run_command
 from tools.file_tools import (
     ToolError,
     append_file,
@@ -39,6 +40,18 @@ TOOL_SCHEMAS = [
         "description": "디렉터리를 생성한다. 이미 존재해도 에러 없이 넘어간다.",
         "args": {"path": "생성할 디렉터리 경로"},
     },
+    {
+        "name": "run_command",
+        "description": (
+            "허용된 명령어(npm, npx, node, yarn, pip, pip3, python, python3, pytest, git)"
+            "만 실행한다. 패키지 설치, 빌드, 테스트 실행, git 조작에 사용한다. "
+            "프로젝트 폴더 밖에서는 실행할 수 없고, 허용 목록에 없는 명령어는 실패로 반환된다."
+        ),
+        "args": {
+            "command": "실행할 명령어 전체 (예: 'npm install express')",
+            "cwd": "명령을 실행할 디렉터리 (기본값 '.', 프로젝트 폴더 기준)",
+        },
+    },
 ]
 
 TOOLS = {
@@ -48,6 +61,7 @@ TOOLS = {
     "write_file": write_file,
     "append_file": append_file,
     "make_dir": make_dir,
+    "run_command": run_command,
 }
 
 
