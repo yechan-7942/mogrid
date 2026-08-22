@@ -93,7 +93,20 @@ def run_agent(
             )
 
             raw_response = call_llm(prompt)
-            parsed = extract_json(raw_response)
+
+            try:
+                parsed = extract_json(raw_response)
+            except AgentLoopError as e:
+                # 모델이 매 턴 만들어내는 형식 오류는 provider 장애와 달리 "다시 시도하면
+                # 되는" 종류다 — 여기서 바로 죽이면 이미 성공한 이전 스텝들까지 다 날아가니,
+                # history에 남겨서 다음 스텝에서 모델 스스로 고치게 한다.
+                print(f"[agent_loop] step {step}: JSON 파싱 실패 - {e}")
+                history.append(
+                    f"[{step}] 에러: 이전 응답이 올바른 JSON이 아니었다 ({e}). "
+                    "반드시 {\"tool\": ...} 또는 {\"final\": ...} 형식의 JSON 객체 하나만 응답해라."
+                )
+                history = cap_entries(history, MAX_HISTORY_ENTRIES, MAX_HISTORY_ENTRY_CHARS)
+                continue
 
             if "final" in parsed:
                 return parsed["final"]
@@ -110,7 +123,12 @@ def run_agent(
                 history = cap_entries(history, MAX_HISTORY_ENTRIES, MAX_HISTORY_ENTRY_CHARS)
                 continue
 
-            raise AgentLoopError(f"모델 응답에 'tool'도 'final'도 없습니다: {parsed}")
+            print(f"[agent_loop] step {step}: 응답에 'tool'도 'final'도 없음 - {parsed}")
+            history.append(
+                f"[{step}] 에러: 응답에 'tool'도 'final'도 없다: {parsed}. "
+                "반드시 {\"tool\": ...} 또는 {\"final\": ...} 형식으로 응답해라."
+            )
+            history = cap_entries(history, MAX_HISTORY_ENTRIES, MAX_HISTORY_ENTRY_CHARS)
 
         raise AgentLoopError(f"{max_steps}스텝 안에 최종 답변을 받지 못했습니다.")
     finally:

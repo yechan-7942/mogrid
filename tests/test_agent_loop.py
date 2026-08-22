@@ -71,10 +71,40 @@ class RunAgentTests(unittest.TestCase):
         self.assertEqual(mock_call_llm.call_count, 2)
 
     @patch("agent_loop.loop.call_llm")
-    def test_response_without_tool_or_final_raises(self, mock_call_llm):
+    def test_response_without_tool_or_final_is_recoverable(self, mock_call_llm):
+        mock_call_llm.side_effect = [
+            json.dumps({"unexpected": "shape"}),
+            json.dumps({"final": "복구됨"}),
+        ]
+        result = run_agent("아무 작업")
+        self.assertEqual(result, "복구됨")
+        second_prompt = mock_call_llm.call_args_list[1].args[0]
+        self.assertIn("에러", second_prompt)
+
+    @patch("agent_loop.loop.call_llm")
+    def test_persistent_missing_tool_or_final_eventually_raises(self, mock_call_llm):
         mock_call_llm.return_value = json.dumps({"unexpected": "shape"})
         with self.assertRaises(AgentLoopError):
-            run_agent("아무 작업")
+            run_agent("아무 작업", max_steps=2)
+        self.assertEqual(mock_call_llm.call_count, 2)
+
+    @patch("agent_loop.loop.call_llm")
+    def test_malformed_json_response_is_recoverable(self, mock_call_llm):
+        mock_call_llm.side_effect = [
+            "이건 JSON이 아니라 그냥 텍스트",
+            json.dumps({"final": "복구됨"}),
+        ]
+        result = run_agent("아무 작업")
+        self.assertEqual(result, "복구됨")
+        second_prompt = mock_call_llm.call_args_list[1].args[0]
+        self.assertIn("올바른 JSON이 아니었다", second_prompt)
+
+    @patch("agent_loop.loop.call_llm")
+    def test_persistent_malformed_json_eventually_raises(self, mock_call_llm):
+        mock_call_llm.return_value = "계속 JSON이 아님"
+        with self.assertRaises(AgentLoopError):
+            run_agent("아무 작업", max_steps=2)
+        self.assertEqual(mock_call_llm.call_count, 2)
 
     @patch("agent_loop.loop.call_llm")
     def test_session_history_included_in_prompt(self, mock_call_llm):
