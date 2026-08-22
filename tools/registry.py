@@ -47,10 +47,10 @@ TOOL_SCHEMAS = [
     {
         "name": "run_command",
         "description": (
-            "허용된 명령어(npm, npx, node, yarn, pip, pip3, python, python3, pytest, git, curl, "
-            "docker, docker-compose)만 실행하고, 끝날 때까지 기다렸다가 결과를 반환한다. 패키지 "
-            "설치, 빌드, 테스트 실행, git 조작, curl로 응답 확인, docker build/push 등 '끝나는' "
-            "명령에 사용한다. 서버처럼 계속 떠 있어야 "
+            "허용된 명령어(npm, npx, node, yarn, pip, pip3, python, python3, pytest, uv, git, "
+            "curl, docker, docker-compose)만 실행하고, 끝날 때까지 기다렸다가 결과를 반환한다. "
+            "패키지 설치, 빌드, 테스트 실행, git 조작, curl로 응답 확인, docker build/push, "
+            "uv sync/add/run 등 '끝나는' 명령에 사용한다. 서버처럼 계속 떠 있어야 "
             "하는 명령에 쓰면 타임아웃으로 항상 실패하니 start_process를 대신 사용해라. "
             "프로젝트 폴더 밖에서는 실행할 수 없고, 허용 목록에 없는 명령어는 실패로 반환된다."
         ),

@@ -12,6 +12,7 @@ from tools.sandbox import resolve_path as _sandbox_resolve_path
 ALLOWED_COMMANDS = {
     "npm", "npx", "node", "yarn",
     "pip", "pip3", "python", "python3", "pytest",
+    "uv",
     "git", "curl",
     "docker", "docker-compose",
 }
