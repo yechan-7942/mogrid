@@ -13,6 +13,7 @@ ALLOWED_COMMANDS = {
     "npm", "npx", "node", "yarn",
     "pip", "pip3", "python", "python3", "pytest",
     "git", "curl",
+    "docker", "docker-compose",
 }
 COMMAND_TIMEOUT = 60
 MAX_OUTPUT_CHARS = 3000
