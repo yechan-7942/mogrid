@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import patch
 
+from router import fallback
 from router.fallback import AllProvidersFailedError, call_llm
 
 
@@ -21,6 +22,9 @@ def _fail(prompt: str) -> str:
 
 
 class CallLlmTests(unittest.TestCase):
+    def setUp(self):
+        fallback._reset_rotation()
+
     @patch(
         "router.fallback.PROVIDERS",
         [("fake", _ok, FakeProviderError)],
@@ -58,6 +62,65 @@ class CallLlmTests(unittest.TestCase):
         ):
             call_llm("안녕")
         self.assertEqual(second_calls, [])
+
+
+class RotationTests(unittest.TestCase):
+    def setUp(self):
+        fallback._reset_rotation()
+
+    def tearDown(self):
+        fallback._reset_rotation()
+
+    def test_starting_provider_rotates_across_calls(self):
+        calls = []
+
+        def make_fn(name):
+            def fn(prompt: str) -> str:
+                calls.append(name)
+                return f"{name}-ok"
+
+            return fn
+
+        providers = [
+            ("p1", make_fn("p1"), FakeProviderError),
+            ("p2", make_fn("p2"), FakeProviderError),
+            ("p3", make_fn("p3"), FakeProviderError),
+        ]
+        with patch("router.fallback.PROVIDERS", providers):
+            for _ in range(4):
+                call_llm("안녕")
+
+        self.assertEqual(calls, ["p1", "p2", "p3", "p1"])
+
+    def test_rotation_still_wraps_around_to_earlier_providers_on_failure(self):
+        calls = []
+
+        def tracked_fail(name):
+            def fn(prompt: str) -> str:
+                calls.append(name)
+                raise FakeProviderError("일부러 실패")
+
+            return fn
+
+        def tracked_ok(name):
+            def fn(prompt: str) -> str:
+                calls.append(name)
+                return f"{name}-ok"
+
+            return fn
+
+        providers = [
+            ("p1", tracked_ok("p1"), FakeProviderError),
+            ("p2", tracked_fail("p2"), FakeProviderError),
+            ("p3", tracked_fail("p3"), FakeProviderError),
+        ]
+        with patch("router.fallback.PROVIDERS", providers):
+            fallback._rotation = 1  # start=p2 이번 호출부터
+            result = call_llm("안녕")
+
+        # p2(fail) -> p3(fail) -> 앞으로 돌아가 p1(성공) 순서로 전부 시도돼야 한다
+        self.assertEqual(calls, ["p2", "p3", "p1"])
+        self.assertEqual(result, "p1-ok")
 
 
 if __name__ == "__main__":

@@ -15,10 +15,26 @@ class AllProvidersFailedError(Exception):
     pass
 
 
-def call_llm(prompt: str) -> str:
-    failures = []
+# 매 호출마다 시작 provider를 한 칸씩 돌려서, 맨 앞(groq)으로 부하가 쏠려 그 provider만
+# 레이트리밋에 먼저 도달하는 걸 막는다. 실패 시에는 여전히 나머지 provider를 순서대로
+# 전부 시도한다 — 시작점만 바뀔 뿐 폴백 커버리지는 그대로.
+_rotation = 0
 
-    for name, call_fn, error_cls in PROVIDERS:
+
+def _reset_rotation() -> None:
+    global _rotation
+    _rotation = 0
+
+
+def call_llm(prompt: str) -> str:
+    global _rotation
+    failures = []
+    n = len(PROVIDERS)
+    start = _rotation % n
+    _rotation += 1
+    order = PROVIDERS[start:] + PROVIDERS[:start]
+
+    for name, call_fn, error_cls in order:
         try:
             return call_fn(prompt)
         except error_cls as e:
