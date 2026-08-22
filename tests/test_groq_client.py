@@ -57,6 +57,31 @@ class CallGroqTests(unittest.TestCase):
         with self.assertRaises(GroqError):
             call_groq("안녕")
 
+    @patch("router.groq_client.requests.post")
+    def test_null_content_raises_groq_error(self, mock_post):
+        # reasoning 모델이 reasoning 토큰만 소모하고 content는 비워서 반환하는 회귀 케이스
+        mock_post.return_value = FakeResponse(
+            200,
+            {
+                "choices": [
+                    {
+                        "message": {"content": None, "reasoning": "생각만 하고 답은 안 함"},
+                        "finish_reason": "stop",
+                    }
+                ]
+            },
+        )
+        with self.assertRaises(GroqError):
+            call_groq("안녕")
+
+    @patch("router.groq_client.requests.post")
+    def test_empty_string_content_raises_groq_error(self, mock_post):
+        mock_post.return_value = FakeResponse(
+            200, {"choices": [{"message": {"content": ""}}]}
+        )
+        with self.assertRaises(GroqError):
+            call_groq("안녕")
+
 
 if __name__ == "__main__":
     unittest.main()

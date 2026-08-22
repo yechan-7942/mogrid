@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
-DEFAULT_MODEL = "llama-3.3-70b-versatile"
+DEFAULT_MODEL = "openai/gpt-oss-120b"
 
 
 class GroqError(Exception):
@@ -52,9 +52,16 @@ def call_groq(prompt: str, model: str = DEFAULT_MODEL, timeout: int = 30) -> str
 
     try:
         data = response.json()
-        return data["choices"][0]["message"]["content"]
+        content = data["choices"][0]["message"]["content"]
     except (KeyError, IndexError, ValueError) as e:
         raise GroqError(f"Groq 응답 형식이 예상과 다릅니다: {e} / raw={response.text}")
+
+    if not content:
+        raise GroqError(
+            f"Groq 응답에 content가 비어 있습니다 (reasoning 모델이 reasoning 토큰만 "
+            f"소모하고 실제 답변은 생성하지 않았을 수 있음): raw={response.text}"
+        )
+    return content
 
 
 if __name__ == "__main__":
