@@ -1,9 +1,11 @@
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from tools.file_tools import ToolError
 from tools.registry import TOOL_SCHEMAS, TOOLS, call_tool
+from tools.sandbox import PROJECT_ROOT_ENV
 
 
 class RegistryConsistencyTests(unittest.TestCase):
@@ -16,8 +18,11 @@ class CallToolTests(unittest.TestCase):
     def setUp(self):
         self._tmpdir = tempfile.TemporaryDirectory()
         self.tmp = self._tmpdir.name
+        self._env_patch = patch.dict(os.environ, {PROJECT_ROOT_ENV: self.tmp})
+        self._env_patch.start()
 
     def tearDown(self):
+        self._env_patch.stop()
         self._tmpdir.cleanup()
 
     def test_unknown_tool_raises(self):

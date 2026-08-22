@@ -12,7 +12,11 @@ from tools.file_tools import (
 TOOL_SCHEMAS = [
     {
         "name": "list_files",
-        "description": "디렉터리 안의 파일/폴더 목록을 반환한다. 경로를 모를 때 먼저 사용한다.",
+        "description": (
+            "디렉터리 안의 파일/폴더 목록을 반환한다. 경로를 모를 때 먼저 사용한다. "
+            "모든 파일 tool(list_files/search_files/read_file/write_file/append_file/make_dir)은 "
+            "프로젝트 폴더 밖의 경로에는 접근할 수 없다."
+        ),
         "args": {"path": "확인할 디렉터리 경로 (기본값 '.')"},
     },
     {

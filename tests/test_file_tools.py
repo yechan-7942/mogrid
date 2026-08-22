@@ -1,6 +1,7 @@
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from tools.file_tools import (
     ToolError,
@@ -11,14 +12,18 @@ from tools.file_tools import (
     search_files,
     write_file,
 )
+from tools.sandbox import PROJECT_ROOT_ENV
 
 
 class FileToolsTestCase(unittest.TestCase):
     def setUp(self):
         self._tmpdir = tempfile.TemporaryDirectory()
         self.tmp = self._tmpdir.name
+        self._env_patch = patch.dict(os.environ, {PROJECT_ROOT_ENV: self.tmp})
+        self._env_patch.start()
 
     def tearDown(self):
+        self._env_patch.stop()
         self._tmpdir.cleanup()
 
     def path(self, *parts: str) -> str:
@@ -145,6 +150,33 @@ class SearchFilesTests(FileToolsTestCase):
         open(os.path.join(hidden_dir, "match.txt"), "w").close()
         result = search_files("match", self.tmp)
         self.assertIn("검색 결과가 없습니다", result)
+
+
+class SandboxScopingTests(FileToolsTestCase):
+    def test_relative_path_resolves_inside_project_root(self):
+        write_file("relative.txt", "hi")
+        with open(self.path("relative.txt"), "r", encoding="utf-8") as f:
+            self.assertEqual(f.read(), "hi")
+
+    def test_write_file_outside_project_root_raises(self):
+        with self.assertRaises(ToolError):
+            write_file("../escape.txt", "hi")
+
+    def test_read_file_outside_project_root_raises(self):
+        with self.assertRaises(ToolError):
+            read_file("../../etc/hosts")
+
+    def test_list_files_outside_project_root_raises(self):
+        with self.assertRaises(ToolError):
+            list_files("..")
+
+    def test_make_dir_outside_project_root_raises(self):
+        with self.assertRaises(ToolError):
+            make_dir("../escape-dir")
+
+    def test_search_files_outside_project_root_raises(self):
+        with self.assertRaises(ToolError):
+            search_files("keyword", "..")
 
 
 if __name__ == "__main__":

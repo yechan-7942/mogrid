@@ -6,8 +6,9 @@ import time
 import uuid
 
 from tools.file_tools import ToolError
+from tools.sandbox import PROJECT_ROOT_ENV, PathEscapesProjectRoot
+from tools.sandbox import resolve_path as _sandbox_resolve_path
 
-PROJECT_ROOT_ENV = "MOGRID_PROJECT_ROOT"
 ALLOWED_COMMANDS = {
     "npm", "npx", "node", "yarn",
     "pip", "pip3", "python", "python3", "pytest",
@@ -22,23 +23,11 @@ PROCESS_STOP_TIMEOUT = 5
 _PROCESSES: dict[str, dict] = {}
 
 
-def _project_root() -> str:
-    root = os.environ.get(PROJECT_ROOT_ENV) or os.getcwd()
-    return os.path.realpath(root)
-
-
 def _resolve_cwd(cwd: str) -> str:
-    project_root = _project_root()
-    target = os.path.realpath(os.path.join(project_root, cwd))
-    outside = True
     try:
-        outside = os.path.commonpath([target, project_root]) != project_root
-    except ValueError:
-        outside = True
-    if outside:
-        raise ToolError(
-            f"프로젝트 폴더({project_root}) 밖의 경로에서는 명령을 실행할 수 없습니다: {cwd}"
-        )
+        target = _sandbox_resolve_path(cwd)
+    except PathEscapesProjectRoot as e:
+        raise ToolError(f"프로젝트 폴더 밖의 경로에서는 명령을 실행할 수 없습니다: {e}")
     if not os.path.isdir(target):
         raise ToolError(f"작업 디렉터리를 찾을 수 없습니다: {cwd}")
     return target

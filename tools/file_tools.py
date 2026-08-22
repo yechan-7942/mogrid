@@ -1,13 +1,24 @@
 import os
 
+from tools.sandbox import PathEscapesProjectRoot
+from tools.sandbox import resolve_path as _sandbox_resolve_path
+
 
 class ToolError(Exception):
     pass
 
 
-def list_files(path: str = ".") -> str:
+def _resolve(path: str) -> str:
     try:
-        entries = os.listdir(path)
+        return _sandbox_resolve_path(path)
+    except PathEscapesProjectRoot as e:
+        raise ToolError(str(e))
+
+
+def list_files(path: str = ".") -> str:
+    target = _resolve(path)
+    try:
+        entries = os.listdir(target)
     except FileNotFoundError:
         raise ToolError(f"경로를 찾을 수 없습니다: {path}")
     except NotADirectoryError:
@@ -18,8 +29,9 @@ def list_files(path: str = ".") -> str:
 
 
 def read_file(path: str) -> str:
+    target = _resolve(path)
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(target, "r", encoding="utf-8") as f:
             return f.read()
     except FileNotFoundError:
         raise ToolError(f"파일을 찾을 수 없습니다: {path}")
@@ -32,8 +44,9 @@ def read_file(path: str) -> str:
 
 
 def write_file(path: str, content: str) -> str:
+    target = _resolve(path)
     try:
-        with open(path, "w", encoding="utf-8") as f:
+        with open(target, "w", encoding="utf-8") as f:
             f.write(content)
     except OSError as e:
         raise ToolError(f"파일을 쓰는 중 오류가 발생했습니다: {path} ({e})")
@@ -41,8 +54,9 @@ def write_file(path: str, content: str) -> str:
 
 
 def append_file(path: str, content: str) -> str:
+    target = _resolve(path)
     try:
-        with open(path, "a", encoding="utf-8") as f:
+        with open(target, "a", encoding="utf-8") as f:
             f.write(content)
     except OSError as e:
         raise ToolError(f"파일에 이어쓰는 중 오류가 발생했습니다: {path} ({e})")
@@ -50,8 +64,9 @@ def append_file(path: str, content: str) -> str:
 
 
 def make_dir(path: str) -> str:
+    target = _resolve(path)
     try:
-        os.makedirs(path, exist_ok=True)
+        os.makedirs(target, exist_ok=True)
     except OSError as e:
         raise ToolError(f"디렉터리를 만드는 중 오류가 발생했습니다: {path} ({e})")
     return f"{path} 디렉터리 생성 완료"
@@ -64,12 +79,13 @@ _SEARCH_MAX_MATCHES = 50
 def search_files(keyword: str, path: str = ".") -> str:
     if not keyword:
         raise ToolError("검색어(keyword)가 비어 있습니다.")
-    if not os.path.isdir(path):
+    target = _resolve(path)
+    if not os.path.isdir(target):
         raise ToolError(f"경로가 디렉터리가 아니거나 존재하지 않습니다: {path}")
 
     matches = []
     truncated = False
-    for root, dirs, files in os.walk(path):
+    for root, dirs, files in os.walk(target):
         dirs[:] = [d for d in dirs if d not in _SEARCH_SKIP_DIRS and not d.startswith(".")]
         for name in sorted(files):
             if len(matches) >= _SEARCH_MAX_MATCHES:
