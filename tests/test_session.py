@@ -2,15 +2,19 @@ import json
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 
+import agent_loop.session as session_module
 from agent_loop.session import (
     MAX_ENTRY_CHARS,
     MAX_SESSION_ENTRIES,
     SessionError,
     load_session,
     save_session,
+    session_file_path,
     trim_session,
 )
+from tools.sandbox import PROJECT_ROOT_ENV
 
 
 class SessionTestCase(unittest.TestCase):
@@ -96,6 +100,42 @@ class LoadSessionSelfHealsOversizedFileTests(SessionTestCase):
         with open(self.session_path, "w", encoding="utf-8") as f:
             json.dump(entries, f)  # save_session을 거치지 않은, 트리밍 전 레거시 파일 흉내
         self.assertEqual(load_session(self.session_path), entries[-MAX_SESSION_ENTRIES:])
+
+
+class SessionFilePathScopingTests(unittest.TestCase):
+    def setUp(self):
+        self._session_dir_tmp = tempfile.TemporaryDirectory()
+        self._project_tmp = tempfile.TemporaryDirectory()
+        self._session_dir_patch = patch.object(
+            session_module, "SESSION_DIR", self._session_dir_tmp.name
+        )
+        self._session_dir_patch.start()
+
+    def tearDown(self):
+        self._session_dir_patch.stop()
+        self._session_dir_tmp.cleanup()
+        self._project_tmp.cleanup()
+
+    def test_different_project_roots_get_different_session_files(self):
+        with patch.dict(os.environ, {PROJECT_ROOT_ENV: "/tmp/project-a"}):
+            path_a = session_file_path()
+        with patch.dict(os.environ, {PROJECT_ROOT_ENV: "/tmp/project-b"}):
+            path_b = session_file_path()
+        self.assertNotEqual(path_a, path_b)
+
+    def test_same_project_root_gets_same_session_file(self):
+        with patch.dict(os.environ, {PROJECT_ROOT_ENV: "/tmp/project-a"}):
+            self.assertEqual(session_file_path(), session_file_path())
+
+    def test_default_save_and_load_round_trip_via_project_root(self):
+        with patch.dict(os.environ, {PROJECT_ROOT_ENV: self._project_tmp.name}):
+            save_session(["작업: 테스트\n결과: 완료"])
+            self.assertEqual(load_session(), ["작업: 테스트\n결과: 완료"])
+
+    def test_default_save_does_not_touch_project_root_directory(self):
+        with patch.dict(os.environ, {PROJECT_ROOT_ENV: self._project_tmp.name}):
+            save_session(["x"])
+        self.assertEqual(os.listdir(self._project_tmp.name), [])
 
 
 if __name__ == "__main__":

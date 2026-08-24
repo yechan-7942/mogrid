@@ -14,7 +14,9 @@ Actions CI까지 구현됨.
 
 ## 폴더 구조
 - router/    : provider별 API 클라이언트 + 폴백 로직 (groq, gemini, openrouter, mistral, nvidia)
-- agent_loop/: 요청-응답-tool실행 루프 + 세션 영속성(session.py, 최근 10턴/항목당 2000자 상한)
+- agent_loop/: 요청-응답-tool실행 루프 + 세션 영속성(session.py, 최근 10턴/항목당 2000자
+  상한). 세션 파일은 `MOGRID_PROJECT_ROOT`(없으면 cwd) 기준으로 프로젝트별로 분리되어
+  `~/.mogrid/sessions/`에 저장됨 — 서로 다른 프로젝트의 작업 기록이 섞이지 않는다.
 - tools/     : 모델이 호출할 수 있는 함수들 (list_files, read_file, write_file,
   edit_file, append_file, make_dir, search_files)
 - tests/     : unittest 테스트 스위트 (provider별, tool별, agent_loop, session)
