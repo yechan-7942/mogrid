@@ -6,6 +6,7 @@ from unittest.mock import patch
 from tools.file_tools import (
     ToolError,
     append_file,
+    edit_file,
     list_files,
     make_dir,
     read_file,
@@ -84,6 +85,44 @@ class WriteFileTests(FileToolsTestCase):
         file_path = self.path("f.txt")
         result = write_file(file_path, "12345")
         self.assertIn("5", result)
+
+
+class EditFileTests(FileToolsTestCase):
+    def test_replaces_single_occurrence(self):
+        file_path = self.path("f.txt")
+        write_file(file_path, "hello world")
+        edit_file(file_path, "world", "there")
+        with open(file_path, "r", encoding="utf-8") as f:
+            self.assertEqual(f.read(), "hello there")
+
+    def test_missing_file_raises(self):
+        with self.assertRaises(ToolError):
+            edit_file(self.path("no-such.txt"), "a", "b")
+
+    def test_old_string_not_found_raises(self):
+        file_path = self.path("f.txt")
+        write_file(file_path, "hello world")
+        with self.assertRaises(ToolError):
+            edit_file(file_path, "goodbye", "hi")
+
+    def test_ambiguous_match_without_replace_all_raises(self):
+        file_path = self.path("f.txt")
+        write_file(file_path, "foo foo foo")
+        with self.assertRaises(ToolError):
+            edit_file(file_path, "foo", "bar")
+
+    def test_replace_all_replaces_every_occurrence(self):
+        file_path = self.path("f.txt")
+        write_file(file_path, "foo foo foo")
+        edit_file(file_path, "foo", "bar", replace_all=True)
+        with open(file_path, "r", encoding="utf-8") as f:
+            self.assertEqual(f.read(), "bar bar bar")
+
+    def test_identical_old_and_new_string_raises(self):
+        file_path = self.path("f.txt")
+        write_file(file_path, "hello world")
+        with self.assertRaises(ToolError):
+            edit_file(file_path, "world", "world")
 
 
 class AppendFileTests(FileToolsTestCase):
@@ -177,6 +216,10 @@ class SandboxScopingTests(FileToolsTestCase):
     def test_search_files_outside_project_root_raises(self):
         with self.assertRaises(ToolError):
             search_files("keyword", "..")
+
+    def test_edit_file_outside_project_root_raises(self):
+        with self.assertRaises(ToolError):
+            edit_file("../escape.txt", "a", "b")
 
 
 if __name__ == "__main__":

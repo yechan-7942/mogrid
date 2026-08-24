@@ -47,6 +47,13 @@ class CallToolTests(unittest.TestCase):
         with self.assertRaises(ToolError):
             call_tool("list_files", {"path": self.tmp, "bogus": 1})
 
+    def test_dispatches_to_edit_file(self):
+        file_path = os.path.join(self.tmp, "f.txt")
+        call_tool("write_file", {"path": file_path, "content": "hello world"})
+        call_tool("edit_file", {"path": file_path, "old_string": "world", "new_string": "there"})
+        with open(file_path, "r", encoding="utf-8") as f:
+            self.assertEqual(f.read(), "hello there")
+
 
 if __name__ == "__main__":
     unittest.main()

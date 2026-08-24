@@ -2,6 +2,7 @@ from tools.exec_tools import check_process, run_command, start_process, stop_pro
 from tools.file_tools import (
     ToolError,
     append_file,
+    edit_file,
     list_files,
     make_dir,
     read_file,
@@ -14,7 +15,7 @@ TOOL_SCHEMAS = [
         "name": "list_files",
         "description": (
             "디렉터리 안의 파일/폴더 목록을 반환한다. 경로를 모를 때 먼저 사용한다. "
-            "모든 파일 tool(list_files/search_files/read_file/write_file/append_file/make_dir)은 "
+            "모든 파일 tool(list_files/search_files/read_file/write_file/edit_file/append_file/make_dir)은 "
             "프로젝트 폴더 밖의 경로에는 접근할 수 없다."
         ),
         "args": {"path": "확인할 디렉터리 경로 (기본값 '.')"},
@@ -33,6 +34,22 @@ TOOL_SCHEMAS = [
         "name": "write_file",
         "description": "문자열 내용을 파일에 저장한다. 파일이 없으면 새로 만들고, 있으면 덮어쓴다.",
         "args": {"path": "저장할 파일 경로", "content": "파일에 쓸 내용"},
+    },
+    {
+        "name": "edit_file",
+        "description": (
+            "파일 안의 old_string을 new_string으로 바꾼다. write_file과 달리 파일 전체를 "
+            "다시 쓰지 않고 해당 부분만 바꾸므로, 이미 존재하는 파일을 부분 수정할 때는 "
+            "write_file 대신 이걸 사용해라. old_string은 파일 안에서 정확히 일치해야 하고, "
+            "정확히 1번만 등장해야 한다 (여러 번 등장하면 에러 — old_string에 앞뒤 줄을 "
+            "더 포함시켜 위치를 특정하거나, 전부 바꾸려면 replace_all을 true로 줘라)."
+        ),
+        "args": {
+            "path": "수정할 파일 경로",
+            "old_string": "바꿀 대상 문자열 (파일 내용과 정확히 일치해야 함)",
+            "new_string": "바꿔넣을 문자열",
+            "replace_all": "old_string의 모든 등장을 다 바꿀지 여부 (기본값 false)",
+        },
     },
     {
         "name": "append_file",
@@ -89,6 +106,7 @@ TOOLS = {
     "search_files": search_files,
     "read_file": read_file,
     "write_file": write_file,
+    "edit_file": edit_file,
     "append_file": append_file,
     "make_dir": make_dir,
     "run_command": run_command,
