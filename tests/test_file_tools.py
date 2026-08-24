@@ -66,6 +66,51 @@ class ReadFileTests(FileToolsTestCase):
         with self.assertRaises(ToolError):
             read_file(self.tmp)
 
+    def test_reads_full_file_by_default_matching_original_content(self):
+        file_path = self.path("f.txt")
+        content = "line1\nline2\nline3\n"
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(content)
+        self.assertEqual(read_file(file_path), content)
+
+    def test_offset_starts_from_given_line(self):
+        file_path = self.path("f.txt")
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write("line1\nline2\nline3\n")
+        self.assertEqual(read_file(file_path, offset=2), "line2\nline3\n")
+
+    def test_limit_caps_number_of_lines_and_notes_truncation(self):
+        file_path = self.path("f.txt")
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write("line1\nline2\nline3\n")
+        result = read_file(file_path, limit=1)
+        self.assertIn("line1", result)
+        self.assertNotIn("line2", result)
+        self.assertIn("표시됨", result)
+
+    def test_offset_and_limit_together(self):
+        file_path = self.path("f.txt")
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write("line1\nline2\nline3\n")
+        result = read_file(file_path, offset=2, limit=1)
+        self.assertIn("line2", result)
+        self.assertNotIn("line1", result)
+        self.assertNotIn("line3", result)
+
+    def test_offset_beyond_end_of_file_raises(self):
+        file_path = self.path("f.txt")
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write("line1\n")
+        with self.assertRaises(ToolError):
+            read_file(file_path, offset=99)
+
+    def test_offset_below_one_raises(self):
+        file_path = self.path("f.txt")
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write("line1\n")
+        with self.assertRaises(ToolError):
+            read_file(file_path, offset=0)
+
 
 class WriteFileTests(FileToolsTestCase):
     def test_creates_new_file(self):
@@ -189,6 +234,26 @@ class SearchFilesTests(FileToolsTestCase):
         open(os.path.join(hidden_dir, "match.txt"), "w").close()
         result = search_files("match", self.tmp)
         self.assertIn("검색 결과가 없습니다", result)
+
+    def test_reports_every_matching_line_in_a_file(self):
+        file_path = self.path("notes.txt")
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write("keyword one\nno match\nkeyword two\n")
+        result = search_files("keyword", self.tmp)
+        self.assertIn(":1:", result)
+        self.assertIn(":3:", result)
+
+    def test_regex_matches_pattern_not_literal_substring(self):
+        file_path = self.path("notes.txt")
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write("foo123\nfoobar\n")
+        result = search_files(r"foo\d+", self.tmp, regex=True)
+        self.assertIn("foo123", result)
+        self.assertNotIn("foobar", result)
+
+    def test_invalid_regex_raises(self):
+        with self.assertRaises(ToolError):
+            search_files("(unclosed", self.tmp, regex=True)
 
 
 class SandboxScopingTests(FileToolsTestCase):

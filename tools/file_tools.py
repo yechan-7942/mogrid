@@ -1,4 +1,5 @@
 import os
+import re
 
 from tools.sandbox import PathEscapesProjectRoot
 from tools.sandbox import resolve_path as _sandbox_resolve_path
@@ -28,11 +29,11 @@ def list_files(path: str = ".") -> str:
     return "\n".join(sorted(entries)) if entries else "(빈 디렉터리)"
 
 
-def read_file(path: str) -> str:
+def read_file(path: str, offset: int = 1, limit: int | None = None) -> str:
     target = _resolve(path)
     try:
         with open(target, "r", encoding="utf-8") as f:
-            return f.read()
+            lines = f.readlines()
     except FileNotFoundError:
         raise ToolError(f"파일을 찾을 수 없습니다: {path}")
     except IsADirectoryError:
@@ -41,6 +42,27 @@ def read_file(path: str) -> str:
         raise ToolError(f"파일을 UTF-8로 읽을 수 없습니다 (바이너리 파일일 수 있음): {path}")
     except OSError as e:
         raise ToolError(f"파일을 읽는 중 오류가 발생했습니다: {path} ({e})")
+
+    if offset < 1:
+        raise ToolError("offset은 1 이상이어야 합니다 (파일의 첫 줄이 1번줄).")
+    if limit is not None and limit < 1:
+        raise ToolError("limit은 1 이상이어야 합니다.")
+
+    total = len(lines)
+    start = offset - 1
+    if total == 0:
+        return ""
+    if start >= total:
+        raise ToolError(f"offset({offset})이 파일의 전체 줄 수({total})를 넘어섰습니다.")
+
+    end = total if limit is None else min(start + limit, total)
+    content = "".join(lines[start:end])
+    if end < total:
+        content += (
+            f"\n(파일 전체 {total}줄 중 {offset}~{end}번째 줄만 표시됨. "
+            "나머지를 읽으려면 offset을 늘려 다시 호출해라.)"
+        )
+    return content
 
 
 def write_file(path: str, content: str) -> str:
@@ -113,14 +135,27 @@ def make_dir(path: str) -> str:
 
 _SEARCH_SKIP_DIRS = {"__pycache__", "venv", "node_modules"}
 _SEARCH_MAX_MATCHES = 50
+_SEARCH_MAX_MATCHES_PER_FILE = 5
 
 
-def search_files(keyword: str, path: str = ".") -> str:
+def search_files(keyword: str, path: str = ".", regex: bool = False) -> str:
     if not keyword:
         raise ToolError("검색어(keyword)가 비어 있습니다.")
     target = _resolve(path)
     if not os.path.isdir(target):
         raise ToolError(f"경로가 디렉터리가 아니거나 존재하지 않습니다: {path}")
+
+    if regex:
+        try:
+            pattern = re.compile(keyword)
+        except re.error as e:
+            raise ToolError(f"정규식이 올바르지 않습니다: {keyword} ({e})")
+        name_matches = lambda name: pattern.search(name) is not None
+        line_matches = lambda line: pattern.search(line) is not None
+    else:
+        keyword_lower = keyword.lower()
+        name_matches = lambda name: keyword_lower in name.lower()
+        line_matches = lambda line: keyword in line
 
     matches = []
     truncated = False
@@ -131,15 +166,21 @@ def search_files(keyword: str, path: str = ".") -> str:
                 truncated = True
                 break
             full_path = os.path.join(root, name)
-            if keyword.lower() in name.lower():
+            if name_matches(name):
                 matches.append(f"{full_path} (파일명 일치)")
                 continue
             try:
                 with open(full_path, "r", encoding="utf-8") as f:
+                    file_match_count = 0
                     for lineno, line in enumerate(f, start=1):
-                        if keyword in line:
-                            matches.append(f"{full_path}:{lineno}: {line.strip()}")
+                        if len(matches) >= _SEARCH_MAX_MATCHES:
+                            truncated = True
                             break
+                        if line_matches(line):
+                            matches.append(f"{full_path}:{lineno}: {line.strip()}")
+                            file_match_count += 1
+                            if file_match_count >= _SEARCH_MAX_MATCHES_PER_FILE:
+                                break
             except (UnicodeDecodeError, OSError):
                 continue
         if truncated:
