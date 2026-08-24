@@ -1,20 +1,22 @@
 # Mogrid
 
 ## 프로젝트 목적
-무료 LLM API(Groq, Gemini, OpenRouter, Mistral)를 여러 개 묶어서, CLI 환경에서
-파일을 읽고 쓰며 계속 작업을 이어가는 에이전트 도구. 하나의 provider가
+무료 LLM API(Groq, Gemini, OpenRouter, Mistral, NVIDIA NIM)를 여러 개 묶어서, CLI
+환경에서 파일을 읽고 쓰며 계속 작업을 이어가는 에이전트 도구. 하나의 provider가
 실패하면 다음 provider로 자동 전환되는 폴백 라우터가 핵심.
 
 ## 현재 단계
-MVP 완성 — 폴백 라우터(groq→gemini→openrouter→mistral), tool 6종, 에이전틱 루프,
-CLI 진입점(`main.py`, `mogrid` 명령으로 설치 가능), 상한 있는 디스크 기반 세션
-영속성, unittest 테스트 스위트 + GitHub Actions CI까지 구현됨.
+MVP 완성 이후 Claude Code에 준하는 수준으로 고도화 진행 중 — 폴백 라우터
+(groq→gemini→openrouter→mistral→nvidia), tool 7종(edit_file 포함, 부분 수정/정규식
+검색/offset·limit 읽기 지원), 에이전틱 루프, CLI 진입점(`main.py`, `mogrid` 명령으로
+설치 가능), 상한 있는 디스크 기반 세션 영속성, unittest 테스트 스위트 + GitHub
+Actions CI까지 구현됨.
 
 ## 폴더 구조
-- router/    : provider별 API 클라이언트 + 폴백 로직 (groq, gemini, openrouter, mistral)
+- router/    : provider별 API 클라이언트 + 폴백 로직 (groq, gemini, openrouter, mistral, nvidia)
 - agent_loop/: 요청-응답-tool실행 루프 + 세션 영속성(session.py, 최근 10턴/항목당 2000자 상한)
 - tools/     : 모델이 호출할 수 있는 함수들 (list_files, read_file, write_file,
-  append_file, make_dir, search_files)
+  edit_file, append_file, make_dir, search_files)
 - tests/     : unittest 테스트 스위트 (provider별, tool별, agent_loop, session)
 - main.py    : CLI 진입점 (한 번 실행 모드 / 대화형 모드)
 - pyproject.toml: `pip install -e .`로 설치하면 `mogrid` 명령 사용 가능
