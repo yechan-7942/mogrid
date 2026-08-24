@@ -33,10 +33,13 @@ Actions CI까지 구현됨.
 ```bash
 python3 -m venv venv && source venv/bin/activate
 pip install -e .
+mogrid setup                # provider API 키 설정 마법사 (브라우저로 발급 페이지를 열어줌)
 mogrid                      # 대화형 모드
 mogrid "작업 설명"           # 한 번 실행 모드
 ```
 `venv/`는 `.gitignore`에 포함되어 있음 — 로컬 개발용으로만 생성.
+`mogrid setup`은 로그인/키 발급은 사용자가 직접 하게 하고, 발급 페이지를 여는 것과
+받은 키를 `.env`에 저장하는 것만 자동화한다 — 로그인 자격 증명을 다루지 않는다.
 
 ## 테스트
 ```bash
