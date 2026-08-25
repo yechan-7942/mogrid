@@ -3,6 +3,7 @@ import unittest
 from unittest.mock import patch
 
 from agent_loop.loop import AgentLoopError, extract_json, run_agent
+from router.fallback import AllProvidersFailedError
 from tools.registry import ToolError
 
 
@@ -21,6 +22,20 @@ class ExtractJsonTests(unittest.TestCase):
     def test_invalid_json_raises(self):
         with self.assertRaises(AgentLoopError):
             extract_json('{"tool": "list_files", "args": }')
+
+    def test_ignores_trailing_content_after_valid_json(self):
+        # Qwen 같은 hybrid-thinking 모델이 JSON 뒤에 </think> 태그나 JSON을 한 번 더
+        # 붙여서 반환하는 경우 (실사용 중 재현됨) — 첫 번째 완전한 JSON만 뽑아야 한다.
+        text = '{"tool": "list_files", "args": {"path": "."}}\n</think>\n\n{"tool": "list_files", "args": {"path": "."}}'
+        self.assertEqual(
+            extract_json(text), {"tool": "list_files", "args": {"path": "."}}
+        )
+
+    def test_ignores_duplicate_trailing_brace(self):
+        text = '{"tool": "read_file", "args": {"path": "calc.py"}}}'
+        self.assertEqual(
+            extract_json(text), {"tool": "read_file", "args": {"path": "calc.py"}}
+        )
 
 
 class RunAgentTests(unittest.TestCase):
@@ -105,6 +120,15 @@ class RunAgentTests(unittest.TestCase):
         with self.assertRaises(AgentLoopError):
             run_agent("아무 작업", max_steps=2)
         self.assertEqual(mock_call_llm.call_count, 2)
+
+    @patch("agent_loop.loop.call_llm")
+    def test_all_providers_failed_raises_agent_loop_error_immediately(self, mock_call_llm):
+        # 모든 provider가 실패하면 재시도해도 나아질 여지가 없으므로, history에 남겨
+        # 스텝을 반복하지 말고 즉시 AgentLoopError로 보고해야 한다 (main.py가 잡을 수 있게).
+        mock_call_llm.side_effect = AllProvidersFailedError("모든 provider가 실패했습니다.")
+        with self.assertRaises(AgentLoopError):
+            run_agent("아무 작업", max_steps=10)
+        self.assertEqual(mock_call_llm.call_count, 1)
 
     @patch("agent_loop.loop.call_llm")
     def test_session_history_included_in_prompt(self, mock_call_llm):

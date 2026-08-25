@@ -1,7 +1,7 @@
 import json
 
 from agent_loop.text_utils import cap_entries
-from router.fallback import call_llm
+from router.fallback import AllProvidersFailedError, call_llm
 from tools.exec_tools import kill_all_processes
 from tools.registry import TOOL_SCHEMAS, ToolError, call_tool
 
@@ -76,13 +76,17 @@ def build_system_prompt() -> str:
 
 def extract_json(text: str) -> dict:
     start = text.find("{")
-    end = text.rfind("}")
-    if start == -1 or end == -1 or end < start:
+    if start == -1:
         raise AgentLoopError(f"모델 응답에서 JSON을 찾을 수 없습니다: {text}")
+    # 첫 '{'부터 마지막 '}'까지를 통째로 파싱하면, 그 뒤에 다른 내용이 더 붙었을 때
+    # (예: Qwen 같은 hybrid-thinking 모델이 </think> 태그나 JSON을 중복으로 더 뱉는
+    # 경우) "Extra data" 에러로 통째로 실패한다. raw_decode는 첫 번째 완전한 JSON
+    # 값만 파싱하고 그 뒤는 무시하므로 이런 꼬리 데이터에 안전하다.
     try:
-        return json.loads(text[start : end + 1])
+        obj, _ = json.JSONDecoder().raw_decode(text[start:])
     except json.JSONDecodeError as e:
         raise AgentLoopError(f"모델 응답 JSON 파싱 실패: {e} / raw={text}")
+    return obj
 
 
 def run_agent(
@@ -103,7 +107,13 @@ def run_agent(
                 "다음 행동을 JSON으로 응답해라."
             )
 
-            raw_response = call_llm(prompt)
+            try:
+                raw_response = call_llm(prompt)
+            except AllProvidersFailedError as e:
+                # 개별 provider 장애는 fallback이 이미 흡수한다 — 여기까지 올라왔다는 건
+                # 전부 다 실패했다는 뜻이라, 재시도해도 나아질 여지가 없다. history에
+                # 남겨서 재시도를 반복하기보다 바로 실패로 보고한다.
+                raise AgentLoopError(f"모든 provider가 실패해서 작업을 진행할 수 없습니다: {e}")
 
             try:
                 parsed = extract_json(raw_response)
