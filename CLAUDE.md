@@ -23,6 +23,10 @@ MVP 완성 이후 Claude Code에 준하는 수준으로 고도화 진행 중 —
   run_command와 "기존 파일 덮어쓰기"(write_file)는 실행 전 `confirm` 콜백으로 확인을
   받는다 — 대화형 모드는 직접 물어보고, 한 번 실행 모드는 기본 차단(`--yes`나
   `MOGRID_AUTO_APPROVE=1`로 해제). confirm을 안 넘기면(테스트 등) 게이팅 자체가 없다.
+  session_history가 10개를 넘으면 그냥 자르지 않고 summarizer.py가 넘치는 만큼만
+  LLM으로 요약해서 한 항목(`[이전 작업 요약] ...`)으로 압축하고 최근 기록은 그대로
+  둔다(`main.py: summarize_session_if_needed`) — 요약 자체가 실패하면(전체 provider
+  장애 등) 기존 방식(그냥 자르기)으로 안전하게 폴백한다.
 - tools/     : 모델이 호출할 수 있는 함수들 (list_files, read_file, write_file,
   edit_file, append_file, make_dir, search_files, update_task_list). task_tracker.py는
   exec_tools.py의 `_PROCESSES`와 같은 패턴으로 모듈 전역 상태를 쓰고, run_agent() 시작
@@ -61,5 +65,7 @@ API 키 소모 없이 실행됨. `router.fallback`을 테스트할 때는 개별
 push/PR마다 GitHub Actions(`.github/workflows/test.yml`)에서도 동일하게 실행됨.
 
 ## 다음 단계
-현재 특별히 지정된 다음 단계 없음 — 사용자 지시에 따라 진행 (예: agent_loop의
-간접/우회 표현 작업 지시 처리 한계 개선, Notion 문서화 등).
+"Claude Code에 준하는 수준으로" 고도화 로드맵 5개(edit_file, search/read 개선,
+task tracking, 위험 행동 확인, 세션 요약) 완료. 현재 특별히 지정된 다음 단계 없음 —
+사용자 지시에 따라 진행 (예: agent_loop의 간접/우회 표현 작업 지시 처리 한계 개선,
+Notion 문서화 등).

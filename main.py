@@ -8,7 +8,9 @@ from typing import Callable
 from dotenv import find_dotenv, load_dotenv, set_key
 
 from agent_loop.loop import AgentLoopError, run_agent
-from agent_loop.session import SessionError, load_session, save_session, trim_session
+from agent_loop.session import MAX_SESSION_ENTRIES, SessionError, load_session, save_session, trim_session
+from agent_loop.summarizer import SUMMARY_PREFIX, summarize_entries
+from router.fallback import AllProvidersFailedError
 
 PROVIDER_SETUP = [
     ("GROQ_API_KEY", "Groq", "https://console.groq.com/keys"),
@@ -95,6 +97,23 @@ def run_task(
     return result
 
 
+def summarize_session_if_needed(session_history: list[str]) -> list[str]:
+    if len(session_history) <= MAX_SESSION_ENTRIES:
+        return trim_session(session_history)
+
+    # 그냥 자르면 오래된 작업 기록이 통째로 사라진다. 넘치는 만큼만 LLM으로 요약해서
+    # 한 항목으로 압축하고, 최근 기록은 그대로 유지한다.
+    keep_count = MAX_SESSION_ENTRIES - 1
+    to_summarize = session_history[:-keep_count]
+    recent = session_history[-keep_count:]
+    try:
+        summary = summarize_entries(to_summarize)
+    except AllProvidersFailedError as e:
+        print(f"[경고] 세션 요약에 실패해 오래된 기록을 요약 없이 정리합니다: {e}", file=sys.stderr)
+        return trim_session(session_history)
+    return trim_session([f"{SUMMARY_PREFIX}{summary}"] + recent)
+
+
 def load_session_safely() -> list[str]:
     try:
         return load_session()
@@ -134,7 +153,7 @@ def run_interactive() -> None:
         result = run_task(task, session_history, confirm=interactive_confirm)
         if result is not None:
             session_history.append(f"작업: {task}\n결과: {result}")
-            session_history = trim_session(session_history)
+            session_history = summarize_session_if_needed(session_history)
             save_session_safely(session_history)
 
 
@@ -168,7 +187,7 @@ def main() -> None:
         result = run_task(args.task, session_history, confirm=one_shot_confirm(auto_approve))
         if result is not None:
             session_history.append(f"작업: {args.task}\n결과: {result}")
-            session_history = trim_session(session_history)
+            session_history = summarize_session_if_needed(session_history)
             save_session_safely(session_history)
     else:
         run_interactive()

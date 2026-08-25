@@ -3,7 +3,16 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from main import PROVIDER_SETUP, interactive_confirm, one_shot_confirm, run_setup
+from agent_loop.session import MAX_SESSION_ENTRIES
+from agent_loop.summarizer import SUMMARY_PREFIX
+from main import (
+    PROVIDER_SETUP,
+    interactive_confirm,
+    one_shot_confirm,
+    run_setup,
+    summarize_session_if_needed,
+)
+from router.fallback import AllProvidersFailedError
 
 
 class RunSetupTests(unittest.TestCase):
@@ -115,6 +124,38 @@ class OneShotConfirmTests(unittest.TestCase):
     def test_auto_approve_false_always_blocks(self):
         confirm = one_shot_confirm(False)
         self.assertFalse(confirm("위험한 작업"))
+
+
+class SummarizeSessionIfNeededTests(unittest.TestCase):
+    def test_under_cap_returns_unchanged(self):
+        entries = [f"entry-{i}" for i in range(MAX_SESSION_ENTRIES - 1)]
+        self.assertEqual(summarize_session_if_needed(entries), entries)
+
+    @patch("main.summarize_entries")
+    def test_over_cap_summarizes_oldest_and_keeps_recent(self, mock_summarize):
+        mock_summarize.return_value = "요약 결과"
+        entries = [f"entry-{i}" for i in range(MAX_SESSION_ENTRIES + 1)]
+
+        result = summarize_session_if_needed(entries)
+
+        self.assertEqual(len(result), MAX_SESSION_ENTRIES)
+        self.assertEqual(result[0], f"{SUMMARY_PREFIX}요약 결과")
+        self.assertEqual(result[1:], entries[-(MAX_SESSION_ENTRIES - 1):])
+        # 넘친 만큼(가장 오래된 것들)만 요약 대상으로 넘겼는지 확인
+        summarized_entries = mock_summarize.call_args.args[0]
+        self.assertEqual(summarized_entries, entries[: -(MAX_SESSION_ENTRIES - 1)])
+
+    @patch("main.summarize_entries")
+    def test_summarization_failure_falls_back_to_plain_trim(self, mock_summarize):
+        mock_summarize.side_effect = AllProvidersFailedError("모든 provider가 실패했습니다.")
+        entries = [f"entry-{i}" for i in range(MAX_SESSION_ENTRIES + 3)]
+
+        result = summarize_session_if_needed(entries)
+
+        self.assertEqual(len(result), MAX_SESSION_ENTRIES)
+        self.assertEqual(result, entries[-MAX_SESSION_ENTRIES:])
+        for entry in result:
+            self.assertFalse(entry.startswith(SUMMARY_PREFIX))
 
 
 if __name__ == "__main__":
