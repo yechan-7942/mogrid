@@ -1,19 +1,22 @@
 # Mogrid
 
 ## 프로젝트 목적
-무료 LLM API(Groq, Gemini, OpenRouter, Mistral, NVIDIA NIM)를 여러 개 묶어서, CLI
-환경에서 파일을 읽고 쓰며 계속 작업을 이어가는 에이전트 도구. 하나의 provider가
-실패하면 다음 provider로 자동 전환되는 폴백 라우터가 핵심.
+무료 LLM API(Groq, Gemini, OpenRouter, Mistral, NVIDIA NIM) + 로컬 LLM(Ollama)을
+여러 개 묶어서, CLI 환경에서 파일을 읽고 쓰며 계속 작업을 이어가는 에이전트 도구.
+하나의 provider가 실패하면 다음 provider로 자동 전환되는 폴백 라우터가 핵심.
 
 ## 현재 단계
 MVP 완성 이후 Claude Code에 준하는 수준으로 고도화 진행 중 — 폴백 라우터
-(groq→gemini→openrouter→mistral→nvidia), tool 7종(edit_file 포함, 부분 수정/정규식
-검색/offset·limit 읽기 지원), 에이전틱 루프, CLI 진입점(`main.py`, `mogrid` 명령으로
-설치 가능), 상한 있는 디스크 기반 세션 영속성, unittest 테스트 스위트 + GitHub
-Actions CI까지 구현됨.
+(groq→gemini→openrouter→mistral→nvidia→ollama), tool 7종(edit_file 포함, 부분
+수정/정규식 검색/offset·limit 읽기 지원), 에이전틱 루프, CLI 진입점(`main.py`,
+`mogrid` 명령으로 설치 가능), 상한 있는 디스크 기반 세션 영속성, unittest
+테스트 스위트 + GitHub Actions CI까지 구현됨.
 
 ## 폴더 구조
-- router/    : provider별 API 클라이언트 + 폴백 로직 (groq, gemini, openrouter, mistral, nvidia)
+- router/    : provider별 API 클라이언트 + 폴백 로직 (groq, gemini, openrouter, mistral,
+  nvidia, ollama). ollama는 로컬 서버(기본 http://localhost:11434, `OLLAMA_BASE_URL`로
+  변경 가능)라 API 키가 없고, 콜드 스타트(모델을 메모리에서 내렸다가 다시 로드) 시
+  응답까지 2~3분 걸릴 수 있어 timeout을 다른 provider보다 훨씬 크게 잡아뒀다.
 - agent_loop/: 요청-응답-tool실행 루프 + 세션 영속성(session.py, 최근 10턴/항목당 2000자
   상한). 세션 파일은 `MOGRID_PROJECT_ROOT`(없으면 cwd) 기준으로 프로젝트별로 분리되어
   `~/.mogrid/sessions/`에 저장됨 — 서로 다른 프로젝트의 작업 기록이 섞이지 않는다.

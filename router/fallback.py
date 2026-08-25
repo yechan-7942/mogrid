@@ -2,6 +2,7 @@ from router.gemini_client import GeminiError, call_gemini
 from router.groq_client import GroqError, call_groq
 from router.mistral_client import MistralError, call_mistral
 from router.nvidia_client import NvidiaError, call_nvidia
+from router.ollama_client import OllamaError, call_ollama
 from router.openrouter_client import OpenRouterError, call_openrouter
 
 PROVIDERS = [
@@ -10,6 +11,7 @@ PROVIDERS = [
     ("openrouter", call_openrouter, OpenRouterError),
     ("mistral", call_mistral, MistralError),
     ("nvidia", call_nvidia, NvidiaError),
+    ("ollama", call_ollama, OllamaError),
 ]
 
 
