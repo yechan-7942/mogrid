@@ -5,6 +5,7 @@ from unittest.mock import patch
 from agent_loop.loop import AgentLoopError, extract_json, run_agent
 from router.fallback import AllProvidersFailedError
 from tools.registry import ToolError
+from tools.task_tracker import render_task_list
 
 
 class ExtractJsonTests(unittest.TestCase):
@@ -120,6 +121,34 @@ class RunAgentTests(unittest.TestCase):
         with self.assertRaises(AgentLoopError):
             run_agent("아무 작업", max_steps=2)
         self.assertEqual(mock_call_llm.call_count, 2)
+
+    @patch("agent_loop.loop.call_llm")
+    def test_task_list_rendered_into_next_prompt(self, mock_call_llm):
+        mock_call_llm.side_effect = [
+            json.dumps(
+                {
+                    "tool": "update_task_list",
+                    "args": {"tasks": [{"content": "첫 하위 작업", "status": "in_progress"}]},
+                }
+            ),
+            json.dumps({"final": "완료"}),
+        ]
+
+        run_agent("여러 단계짜리 작업")
+
+        second_prompt = mock_call_llm.call_args_list[1].args[0]
+        self.assertIn("첫 하위 작업", second_prompt)
+
+    @patch("agent_loop.loop.call_llm")
+    def test_task_list_reset_between_separate_runs(self, mock_call_llm):
+        from tools.task_tracker import update_task_list
+
+        update_task_list([{"content": "이전 작업 잔재", "status": "pending"}])
+        mock_call_llm.return_value = json.dumps({"final": "완료"})
+
+        run_agent("새 작업")
+
+        self.assertNotIn("이전 작업 잔재", render_task_list())
 
     @patch("agent_loop.loop.call_llm")
     def test_all_providers_failed_raises_agent_loop_error_immediately(self, mock_call_llm):

@@ -7,10 +7,10 @@
 
 ## 현재 단계
 MVP 완성 이후 Claude Code에 준하는 수준으로 고도화 진행 중 — 폴백 라우터
-(groq→gemini→openrouter→mistral→nvidia→ollama), tool 7종(edit_file 포함, 부분
-수정/정규식 검색/offset·limit 읽기 지원), 에이전틱 루프, CLI 진입점(`main.py`,
-`mogrid` 명령으로 설치 가능), 상한 있는 디스크 기반 세션 영속성, unittest
-테스트 스위트 + GitHub Actions CI까지 구현됨.
+(groq→gemini→openrouter→mistral→nvidia→ollama), tool 8종(edit_file 포함 부분 수정/
+정규식 검색/offset·limit 읽기 지원, update_task_list로 다단계 작업 진행 상황 추적),
+에이전틱 루프, CLI 진입점(`main.py`, `mogrid` 명령으로 설치 가능), 상한 있는 디스크
+기반 세션 영속성, unittest 테스트 스위트 + GitHub Actions CI까지 구현됨.
 
 ## 폴더 구조
 - router/    : provider별 API 클라이언트 + 폴백 로직 (groq, gemini, openrouter, mistral,
@@ -21,7 +21,9 @@ MVP 완성 이후 Claude Code에 준하는 수준으로 고도화 진행 중 —
   상한). 세션 파일은 `MOGRID_PROJECT_ROOT`(없으면 cwd) 기준으로 프로젝트별로 분리되어
   `~/.mogrid/sessions/`에 저장됨 — 서로 다른 프로젝트의 작업 기록이 섞이지 않는다.
 - tools/     : 모델이 호출할 수 있는 함수들 (list_files, read_file, write_file,
-  edit_file, append_file, make_dir, search_files)
+  edit_file, append_file, make_dir, search_files, update_task_list). task_tracker.py는
+  exec_tools.py의 `_PROCESSES`와 같은 패턴으로 모듈 전역 상태를 쓰고, run_agent() 시작
+  시 매번 reset된다 (작업 간 하위 작업 목록이 새지 않게).
 - tests/     : unittest 테스트 스위트 (provider별, tool별, agent_loop, session)
 - main.py    : CLI 진입점 (한 번 실행 모드 / 대화형 모드)
 - pyproject.toml: `pip install -e .`로 설치하면 `mogrid` 명령 사용 가능

@@ -9,6 +9,7 @@ from tools.file_tools import (
     search_files,
     write_file,
 )
+from tools.task_tracker import update_task_list
 
 TOOL_SCHEMAS = [
     {
@@ -79,6 +80,23 @@ TOOL_SCHEMAS = [
         "args": {"path": "생성할 디렉터리 경로"},
     },
     {
+        "name": "update_task_list",
+        "description": (
+            "여러 단계가 필요한 작업을 진행할 때, 지금까지 파악한 전체 하위 작업 목록과 "
+            "각각의 진행 상태를 기록한다. 호출할 때마다 현재 전체 목록을 통째로 다시 "
+            "제출해라 (일부만 추가/수정하는 게 아니라 매번 전체 목록). 세 단계 이상 걸리는 "
+            "작업을 시작할 때 목록을 한 번 만들고, 각 하위 작업을 끝낼 때마다 그 항목의 "
+            "status를 completed로 바꿔서 다시 호출해라. 한두 스텝으로 끝나는 간단한 작업에는 "
+            "쓰지 마라."
+        ),
+        "args": {
+            "tasks": (
+                '[{"content": "하위 작업 설명", "status": "pending|in_progress|completed"}, ...] '
+                "형태의 리스트"
+            ),
+        },
+    },
+    {
         "name": "run_command",
         "description": (
             "허용된 명령어(npm, npx, node, yarn, pip, pip3, python, python3, pytest, uv, git, "
@@ -126,6 +144,7 @@ TOOLS = {
     "edit_file": edit_file,
     "append_file": append_file,
     "make_dir": make_dir,
+    "update_task_list": update_task_list,
     "run_command": run_command,
     "start_process": start_process,
     "check_process": check_process,

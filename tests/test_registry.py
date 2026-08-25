@@ -6,6 +6,7 @@ from unittest.mock import patch
 from tools.file_tools import ToolError
 from tools.registry import TOOL_SCHEMAS, TOOLS, call_tool
 from tools.sandbox import PROJECT_ROOT_ENV
+from tools.task_tracker import render_task_list, reset_tasks
 
 
 class RegistryConsistencyTests(unittest.TestCase):
@@ -53,6 +54,11 @@ class CallToolTests(unittest.TestCase):
         call_tool("edit_file", {"path": file_path, "old_string": "world", "new_string": "there"})
         with open(file_path, "r", encoding="utf-8") as f:
             self.assertEqual(f.read(), "hello there")
+
+    def test_dispatches_to_update_task_list(self):
+        self.addCleanup(reset_tasks)
+        call_tool("update_task_list", {"tasks": [{"content": "a", "status": "pending"}]})
+        self.assertIn("a", render_task_list())
 
 
 if __name__ == "__main__":

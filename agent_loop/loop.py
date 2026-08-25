@@ -4,6 +4,7 @@ from agent_loop.text_utils import cap_entries
 from router.fallback import AllProvidersFailedError, call_llm
 from tools.exec_tools import kill_all_processes
 from tools.registry import TOOL_SCHEMAS, ToolError, call_tool
+from tools.task_tracker import render_task_list, reset_tasks
 
 MAX_STEPS = 25
 # run_command 등 tool 결과가 길어질 수 있어, session_history와 같은 이유로
@@ -47,6 +48,10 @@ def build_system_prompt() -> str:
         "- search_files의 keyword는 기본적으로 대소문자 무시 부분 문자열이다. 여러 패턴 중 "
         "하나, 단어 경계, 줄 시작/끝처럼 부분 문자열로 표현할 수 없는 조건을 찾을 때만 "
         "regex=true로 정규식을 사용해라.\n"
+        "- 세 단계 이상 걸릴 것 같은 작업을 시작할 때는 update_task_list로 하위 작업 "
+        "목록을 먼저 만들어라. 하위 작업을 하나 끝낼 때마다 그 항목만 completed로 바꿔서 "
+        "전체 목록을 다시 제출해라 (매번 목록 전체를 통째로 제출, 일부만 보내지 마라). "
+        "한두 스텝짜리 간단한 작업에는 쓰지 마라.\n"
         "- 존재하지 않는 폴더 경로에 파일을 쓰려고 하면 먼저 make_dir로 폴더를 만든 뒤 "
         "write_file/append_file을 사용해라.\n"
         "- 작업 설명에 없는 폴더 구조를 임의로 새로 만들지 마라. 특히 파일 경로가 이미 "
@@ -95,6 +100,7 @@ def run_agent(
     system_prompt = build_system_prompt()
     history = []
     session_text = "\n\n".join(session_history) if session_history else "(없음)"
+    reset_tasks()
 
     try:
         for step in range(1, max_steps + 1):
@@ -103,6 +109,7 @@ def run_agent(
                 f"{system_prompt}\n"
                 f"이 세션에서 이전에 완료한 작업들:\n{session_text}\n\n"
                 f"이번 작업: {task}\n\n"
+                f"현재 하위 작업 목록:\n{render_task_list()}\n\n"
                 f"이번 작업 안에서 지금까지 기록:\n{history_text}\n\n"
                 "다음 행동을 JSON으로 응답해라."
             )
