@@ -1,10 +1,19 @@
 import json
+import os
+from typing import Callable
 
 from agent_loop.text_utils import cap_entries
 from router.fallback import AllProvidersFailedError, call_llm
 from tools.exec_tools import kill_all_processes
 from tools.registry import TOOL_SCHEMAS, ToolError, call_tool
+from tools.sandbox import PathEscapesProjectRoot
+from tools.sandbox import resolve_path as _sandbox_resolve_path
 from tools.task_tracker import render_task_list, reset_tasks
+
+# 확인 없이 실행하면 되돌리기 어렵거나 프로젝트 밖(예: git push)에 흔적을 남길 수 있는
+# tool. write_file은 새 파일 생성은 안전하지만 "이미 있는 파일을 덮어쓰는" 경우만 위험하므로
+# 별도로 검사한다.
+CONFIRM_REQUIRED_TOOLS = {"run_command"}
 
 MAX_STEPS = 25
 # run_command 등 tool 결과가 길어질 수 있어, session_history와 같은 이유로
@@ -94,8 +103,25 @@ def extract_json(text: str) -> dict:
     return obj
 
 
+def requires_confirmation(tool_name: str, tool_args: dict) -> str | None:
+    if tool_name in CONFIRM_REQUIRED_TOOLS:
+        return f"명령 실행: {tool_args.get('command', '')}"
+    if tool_name == "write_file":
+        path = tool_args.get("path", "")
+        try:
+            target = _sandbox_resolve_path(path)
+        except PathEscapesProjectRoot:
+            return None  # 샌드박스 밖 경로는 call_tool에서 어차피 에러가 나므로 확인 불필요
+        if os.path.exists(target):
+            return f"기존 파일 덮어쓰기: {path}"
+    return None
+
+
 def run_agent(
-    task: str, max_steps: int = MAX_STEPS, session_history: list[str] | None = None
+    task: str,
+    max_steps: int = MAX_STEPS,
+    session_history: list[str] | None = None,
+    confirm: Callable[[str], bool] | None = None,
 ) -> str:
     system_prompt = build_system_prompt()
     history = []
@@ -144,6 +170,9 @@ def run_agent(
                 tool_args = parsed.get("args", {})
                 print(f"[agent_loop] step {step}: {tool_name}({tool_args}) 호출")
                 try:
+                    reason = requires_confirmation(tool_name, tool_args)
+                    if reason and confirm is not None and not confirm(reason):
+                        raise ToolError(f"사용자가 승인하지 않아 실행이 취소되었습니다: {reason}")
                     result = call_tool(tool_name, tool_args)
                 except ToolError as e:
                     result = f"에러: {e}"

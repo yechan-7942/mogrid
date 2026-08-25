@@ -1,10 +1,13 @@
 import json
+import os
+import tempfile
 import unittest
 from unittest.mock import patch
 
-from agent_loop.loop import AgentLoopError, extract_json, run_agent
+from agent_loop.loop import AgentLoopError, extract_json, requires_confirmation, run_agent
 from router.fallback import AllProvidersFailedError
 from tools.registry import ToolError
+from tools.sandbox import PROJECT_ROOT_ENV
 from tools.task_tracker import render_task_list
 
 
@@ -37,6 +40,89 @@ class ExtractJsonTests(unittest.TestCase):
         self.assertEqual(
             extract_json(text), {"tool": "read_file", "args": {"path": "calc.py"}}
         )
+
+
+class RequiresConfirmationTests(unittest.TestCase):
+    def setUp(self):
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self._env_patch = patch.dict(os.environ, {PROJECT_ROOT_ENV: self._tmpdir.name})
+        self._env_patch.start()
+
+    def tearDown(self):
+        self._env_patch.stop()
+        self._tmpdir.cleanup()
+
+    def test_run_command_always_requires_confirmation(self):
+        reason = requires_confirmation("run_command", {"command": "git push"})
+        self.assertIsNotNone(reason)
+        self.assertIn("git push", reason)
+
+    def test_write_file_to_new_path_does_not_require_confirmation(self):
+        self.assertIsNone(
+            requires_confirmation("write_file", {"path": "new.txt", "content": "x"})
+        )
+
+    def test_write_file_overwriting_existing_file_requires_confirmation(self):
+        existing = os.path.join(self._tmpdir.name, "existing.txt")
+        open(existing, "w").close()
+        reason = requires_confirmation("write_file", {"path": "existing.txt", "content": "x"})
+        self.assertIsNotNone(reason)
+
+    def test_write_file_outside_sandbox_does_not_require_confirmation(self):
+        # call_tool 단계에서 어차피 ToolError로 막히므로 확인 단계에서는 그냥 통과시킨다.
+        self.assertIsNone(
+            requires_confirmation("write_file", {"path": "../escape.txt", "content": "x"})
+        )
+
+    def test_other_tools_do_not_require_confirmation(self):
+        safe_tools = [
+            "edit_file", "append_file", "make_dir", "read_file", "list_files",
+            "search_files", "update_task_list", "start_process", "check_process",
+            "stop_process",
+        ]
+        for name in safe_tools:
+            self.assertIsNone(requires_confirmation(name, {}))
+
+
+class RunAgentConfirmationGatingTests(unittest.TestCase):
+    @patch("agent_loop.loop.call_tool")
+    @patch("agent_loop.loop.call_llm")
+    def test_denied_confirmation_blocks_tool_and_is_reported_in_history(
+        self, mock_call_llm, mock_call_tool
+    ):
+        mock_call_llm.side_effect = [
+            json.dumps({"tool": "run_command", "args": {"command": "git push"}}),
+            json.dumps({"final": "취소됨"}),
+        ]
+        result = run_agent("작업", confirm=lambda reason: False)
+        self.assertEqual(result, "취소됨")
+        mock_call_tool.assert_not_called()
+        second_prompt = mock_call_llm.call_args_list[1].args[0]
+        self.assertIn("승인하지 않아", second_prompt)
+
+    @patch("agent_loop.loop.call_tool")
+    @patch("agent_loop.loop.call_llm")
+    def test_approved_confirmation_proceeds_with_tool_call(self, mock_call_llm, mock_call_tool):
+        mock_call_llm.side_effect = [
+            json.dumps({"tool": "run_command", "args": {"command": "git status"}}),
+            json.dumps({"final": "완료"}),
+        ]
+        mock_call_tool.return_value = "ok"
+        result = run_agent("작업", confirm=lambda reason: True)
+        self.assertEqual(result, "완료")
+        mock_call_tool.assert_called_once_with("run_command", {"command": "git status"})
+
+    @patch("agent_loop.loop.call_tool")
+    @patch("agent_loop.loop.call_llm")
+    def test_no_confirm_callback_means_no_gating(self, mock_call_llm, mock_call_tool):
+        mock_call_llm.side_effect = [
+            json.dumps({"tool": "run_command", "args": {"command": "git status"}}),
+            json.dumps({"final": "완료"}),
+        ]
+        mock_call_tool.return_value = "ok"
+        result = run_agent("작업")
+        self.assertEqual(result, "완료")
+        mock_call_tool.assert_called_once()
 
 
 class RunAgentTests(unittest.TestCase):

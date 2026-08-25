@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from main import PROVIDER_SETUP, run_setup
+from main import PROVIDER_SETUP, interactive_confirm, one_shot_confirm, run_setup
 
 
 class RunSetupTests(unittest.TestCase):
@@ -91,6 +91,30 @@ class RunSetupTests(unittest.TestCase):
         with redirect_stdout(buf):
             run_setup()
         self.assertNotIn("key-value", buf.getvalue())
+
+
+class InteractiveConfirmTests(unittest.TestCase):
+    @patch("main.input", return_value="y")
+    def test_yes_returns_true(self, mock_input):
+        self.assertTrue(interactive_confirm("위험한 작업"))
+
+    @patch("main.input", return_value="n")
+    def test_no_returns_false(self, mock_input):
+        self.assertFalse(interactive_confirm("위험한 작업"))
+
+    @patch("main.input", return_value="")
+    def test_blank_returns_false(self, mock_input):
+        self.assertFalse(interactive_confirm("위험한 작업"))
+
+
+class OneShotConfirmTests(unittest.TestCase):
+    def test_auto_approve_true_always_allows(self):
+        confirm = one_shot_confirm(True)
+        self.assertTrue(confirm("위험한 작업"))
+
+    def test_auto_approve_false_always_blocks(self):
+        confirm = one_shot_confirm(False)
+        self.assertFalse(confirm("위험한 작업"))
 
 
 if __name__ == "__main__":

@@ -3,6 +3,7 @@ import os
 import sys
 import webbrowser
 from getpass import getpass
+from typing import Callable
 
 from dotenv import find_dotenv, load_dotenv, set_key
 
@@ -59,9 +60,33 @@ def run_setup() -> None:
     print("\n설정 완료. mogrid를 실행하면 방금 저장한 키들이 자동으로 로드된다.")
 
 
-def run_task(task: str, session_history: list[str]) -> str | None:
+def interactive_confirm(reason: str) -> bool:
+    answer = input(f"\n[확인 필요] {reason}\n진행할까요? (y/N): ").strip().lower()
+    return answer == "y"
+
+
+def one_shot_confirm(auto_approve: bool):
+    def _confirm(reason: str) -> bool:
+        if auto_approve:
+            return True
+        print(
+            f"[차단됨] 확인이 필요한 작업이라 비대화형 모드에서는 실행하지 않았습니다: {reason}",
+            file=sys.stderr,
+        )
+        print(
+            "실행하려면 --yes 옵션이나 MOGRID_AUTO_APPROVE=1 환경변수를 사용하세요.",
+            file=sys.stderr,
+        )
+        return False
+
+    return _confirm
+
+
+def run_task(
+    task: str, session_history: list[str], confirm: Callable[[str], bool] | None = None
+) -> str | None:
     try:
-        result = run_agent(task, session_history=session_history)
+        result = run_agent(task, session_history=session_history, confirm=confirm)
     except AgentLoopError as e:
         print(f"[에러] 작업을 완료하지 못했습니다: {e}", file=sys.stderr)
         return None
@@ -106,7 +131,7 @@ def run_interactive() -> None:
             save_session_safely(session_history)
             print("세션을 초기화했습니다.")
             continue
-        result = run_task(task, session_history)
+        result = run_task(task, session_history, confirm=interactive_confirm)
         if result is not None:
             session_history.append(f"작업: {task}\n결과: {result}")
             session_history = trim_session(session_history)
@@ -129,11 +154,18 @@ def main() -> None:
         help="한 번 실행할 작업 설명. 생략하면 대화형 모드로 진입한다. "
         "'setup'을 주면 provider API 키 설정 마법사를 실행한다.",
     )
+    parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="한 번 실행 모드에서 확인이 필요한 작업(run_command, 기존 파일 덮어쓰기)도 "
+        "묻지 않고 진행한다. 대화형 모드에는 영향 없음(항상 직접 확인받음).",
+    )
     args = parser.parse_args()
 
     if args.task:
+        auto_approve = args.yes or os.environ.get("MOGRID_AUTO_APPROVE") == "1"
         session_history = load_session_safely()
-        result = run_task(args.task, session_history)
+        result = run_task(args.task, session_history, confirm=one_shot_confirm(auto_approve))
         if result is not None:
             session_history.append(f"작업: {args.task}\n결과: {result}")
             session_history = trim_session(session_history)

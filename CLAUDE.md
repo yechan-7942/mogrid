@@ -20,6 +20,9 @@ MVP 완성 이후 Claude Code에 준하는 수준으로 고도화 진행 중 —
 - agent_loop/: 요청-응답-tool실행 루프 + 세션 영속성(session.py, 최근 10턴/항목당 2000자
   상한). 세션 파일은 `MOGRID_PROJECT_ROOT`(없으면 cwd) 기준으로 프로젝트별로 분리되어
   `~/.mogrid/sessions/`에 저장됨 — 서로 다른 프로젝트의 작업 기록이 섞이지 않는다.
+  run_command와 "기존 파일 덮어쓰기"(write_file)는 실행 전 `confirm` 콜백으로 확인을
+  받는다 — 대화형 모드는 직접 물어보고, 한 번 실행 모드는 기본 차단(`--yes`나
+  `MOGRID_AUTO_APPROVE=1`로 해제). confirm을 안 넘기면(테스트 등) 게이팅 자체가 없다.
 - tools/     : 모델이 호출할 수 있는 함수들 (list_files, read_file, write_file,
   edit_file, append_file, make_dir, search_files, update_task_list). task_tracker.py는
   exec_tools.py의 `_PROCESSES`와 같은 패턴으로 모듈 전역 상태를 쓰고, run_agent() 시작
