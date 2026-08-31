@@ -4,3 +4,4 @@ __pycache__/
 *.pyc
 .mogrid_session.json
 *.egg-info/
+CLAUDE.md
