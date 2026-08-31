@@ -119,6 +119,5 @@ python3 -m unittest discover -s tests -t .
 
 ## 참고
 
-- API 키는 항상 `.env`에서 읽고, 하드코딩하지 않는다.
 - Ollama는 로컬 서버(기본 `http://localhost:11434`)라 API 키가 없고, 콜드 스타트
   시 응답까지 2~3분 걸릴 수 있어 timeout을 다른 provider보다 훨씬 크게 잡아뒀다.
