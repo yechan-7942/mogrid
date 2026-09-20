@@ -5,3 +5,4 @@ __pycache__/
 .mogrid_session.json
 *.egg-info/
 CLAUDE.md
+.DS_Store
