@@ -5,6 +5,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Gemini가 과거 generateContent에서 이 Interactions API로 스펙을 바꾼 전례가 있다.
+# 다시 깨지면(404/스키마 변경 등) 먼저 공식 문서(https://ai.google.dev/gemini-api/docs)에서
+# 최신 엔드포인트/요청 형식을 확인할 것 — 코드나 기억에 의존하지 말 것.
 DEFAULT_MODEL = "gemini-3.6-flash"
 INTERACTIONS_URL = "https://generativelanguage.googleapis.com/v1beta/interactions"
 
