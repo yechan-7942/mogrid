@@ -44,6 +44,24 @@ def claims_unverified_file_action(final_text: str, history: list[str]) -> bool:
     return any(keyword in final_text for keyword in _FILE_ACTION_KEYWORDS)
 
 
+# 작업 지시가 파일/함수 이름을 직접 언급하지 않고 돌려 말하면, 약한 모델이 경로를
+# 추측해서 시도했다가 실패하고, 또 다른 경로를 추측하는 식으로 계속 헤매는 경우가
+# 실사용 중 재현됨 (README 알려진 한계). 경로를 찾을 수 없다는 에러가 나면 그 다음
+# 추측 대신 search_files를 쓰라고 결과에 기계적으로 덧붙인다.
+_PATH_LOOKUP_TOOLS = {"read_file", "edit_file", "list_files"}
+_NOT_FOUND_MARKER = "찾을 수 없습니다"
+_NOT_FOUND_HINT = (
+    " (경로를 다시 추측하지 말고, 설명에서 뽑은 키워드로 search_files를 먼저 호출해서 "
+    "정확한 경로를 찾은 뒤 다시 시도해라.)"
+)
+
+
+def add_not_found_hint(tool_name: str, result: str) -> str:
+    if tool_name in _PATH_LOOKUP_TOOLS and _NOT_FOUND_MARKER in result:
+        return result + _NOT_FOUND_HINT
+    return result
+
+
 class AgentLoopError(Exception):
     pass
 
@@ -62,7 +80,8 @@ def build_system_prompt() -> str:
         "list_files(path='.')로 현재 위치부터 확인해라.\n"
         "- 작업 설명에 등장하는 프로젝트/폴더 이름을 실제 경로의 일부라고 가정하지 마라.\n"
         "- 같은 경로가 이미 실패했다면 그 경로를 다시 시도하지 말고, "
-        "지금까지의 기록을 참고해 다른 경로를 시도해라.\n"
+        "지금까지의 기록을 참고해라. 다른 경로를 또 추측하지 말고 search_files로 "
+        "작업 설명 속 핵심 키워드를 검색해서 정확한 경로를 확인해라.\n"
         "- 파일이 어느 폴더에 있는지 몰라서 여러 폴더를 돌아다니며 찾아야 할 것 같으면, "
         "list_files를 반복 호출하지 말고 search_files(keyword)로 한 번에 찾아라.\n"
         "- 기존 파일의 내용을 유지한 채로 뒤에 내용을 덧붙여야 하면 write_file이 아니라 "
@@ -215,6 +234,7 @@ def run_agent(
                     result = call_tool(tool_name, tool_args)
                 except ToolError as e:
                     result = f"에러: {e}"
+                result = add_not_found_hint(tool_name, result)
                 history.append(f"[{step}] tool={tool_name} args={tool_args} -> {result}")
                 history = cap_entries(history, MAX_HISTORY_ENTRIES, MAX_HISTORY_ENTRY_CHARS)
                 continue

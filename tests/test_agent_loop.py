@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from agent_loop.loop import (
     AgentLoopError,
+    add_not_found_hint,
     claims_unverified_file_action,
     extract_json,
     requires_confirmation,
@@ -111,6 +112,24 @@ class ClaimsUnverifiedFileActionTests(unittest.TestCase):
         self.assertFalse(claims_unverified_file_action(final_text, []))
 
 
+class AddNotFoundHintTests(unittest.TestCase):
+    def test_appends_hint_when_lookup_tool_reports_not_found(self):
+        result = add_not_found_hint("read_file", "에러: 파일을 찾을 수 없습니다: foo.py")
+        self.assertIn("search_files", result)
+
+    def test_leaves_other_errors_untouched(self):
+        result = "에러: offset은 1 이상이어야 합니다."
+        self.assertEqual(add_not_found_hint("read_file", result), result)
+
+    def test_leaves_non_lookup_tools_untouched(self):
+        result = "에러: 파일을 찾을 수 없습니다: foo.py"
+        self.assertEqual(add_not_found_hint("write_file", result), result)
+
+    def test_leaves_successful_results_untouched(self):
+        result = "파일 내용입니다"
+        self.assertEqual(add_not_found_hint("read_file", result), result)
+
+
 class RunAgentConfirmationGatingTests(unittest.TestCase):
     @patch("agent_loop.loop.call_tool")
     @patch("agent_loop.loop.call_llm")
@@ -190,6 +209,35 @@ class RunAgentTests(unittest.TestCase):
         second_prompt = mock_call_llm.call_args_list[1].args[0]
         self.assertIn("에러", second_prompt)
         self.assertIn("파일을 찾을 수 없습니다", second_prompt)
+        # 경로를 잘못 추측했을 때 또 추측하는 대신 search_files를 쓰라는 힌트가
+        # 붙어서 다음 프롬프트로 전달되는지 확인 (간접 표현 작업 지시 처리 개선)
+        self.assertIn("search_files", second_prompt)
+
+    @patch("agent_loop.loop.call_tool")
+    @patch("agent_loop.loop.call_llm")
+    def test_guessed_path_failure_nudges_model_to_search_files(
+        self, mock_call_llm, mock_call_tool
+    ):
+        # 함수/파일 이름을 직접 언급하지 않는 간접적인 지시("시스템 프롬프트를 만드는
+        # 함수를 찾아줘")에 약한 모델이 엉뚱한 경로를 추측했다가 실패하는 상황을 재현.
+        # search_files 힌트를 본 모델이 다음 스텝에서 search_files로 전환하는지 확인.
+        mock_call_llm.side_effect = [
+            json.dumps({"tool": "read_file", "args": {"path": "prompt.py"}}),
+            json.dumps({"tool": "search_files", "args": {"keyword": "system_prompt"}}),
+            json.dumps({"final": "agent_loop/loop.py의 build_system_prompt에 있습니다"}),
+        ]
+        mock_call_tool.side_effect = [
+            ToolError("파일을 찾을 수 없습니다: prompt.py"),
+            "agent_loop/loop.py:70: def build_system_prompt() -> str:",
+        ]
+
+        result = run_agent("시스템 프롬프트를 만드는 함수를 찾아줘")
+
+        self.assertEqual(result, "agent_loop/loop.py의 build_system_prompt에 있습니다")
+        self.assertEqual(
+            [call.args[0] for call in mock_call_tool.call_args_list],
+            ["read_file", "search_files"],
+        )
 
     @patch("agent_loop.loop.call_llm")
     def test_exceeds_max_steps_raises(self, mock_call_llm):
