@@ -10,6 +10,7 @@ from dotenv import find_dotenv, load_dotenv, set_key
 from agent_loop.loop import AgentLoopError, run_agent
 from agent_loop.session import MAX_SESSION_ENTRIES, SessionError, load_session, save_session, trim_session
 from agent_loop.summarizer import SUMMARY_PREFIX, summarize_entries
+from colors import bold, cyan, dim, green, red, yellow
 from router.fallback import AllProvidersFailedError
 
 PROVIDER_SETUP = [
@@ -63,7 +64,7 @@ def run_setup() -> None:
 
 
 def interactive_confirm(reason: str) -> bool:
-    answer = input(f"\n[확인 필요] {reason}\n진행할까요? (y/N): ").strip().lower()
+    answer = input(f"\n{yellow(bold('[확인 필요]'))} {reason}\n진행할까요? (y/N): ").strip().lower()
     return answer == "y"
 
 
@@ -72,11 +73,11 @@ def one_shot_confirm(auto_approve: bool):
         if auto_approve:
             return True
         print(
-            f"[차단됨] 확인이 필요한 작업이라 비대화형 모드에서는 실행하지 않았습니다: {reason}",
+            red(f"[차단됨] 확인이 필요한 작업이라 비대화형 모드에서는 실행하지 않았습니다: {reason}"),
             file=sys.stderr,
         )
         print(
-            "실행하려면 --yes 옵션이나 MOGRID_AUTO_APPROVE=1 환경변수를 사용하세요.",
+            dim("실행하려면 --yes 옵션이나 MOGRID_AUTO_APPROVE=1 환경변수를 사용하세요."),
             file=sys.stderr,
         )
         return False
@@ -90,9 +91,9 @@ def run_task(
     try:
         result = run_agent(task, session_history=session_history, confirm=confirm)
     except AgentLoopError as e:
-        print(f"[에러] 작업을 완료하지 못했습니다: {e}", file=sys.stderr)
+        print(red(f"[에러] 작업을 완료하지 못했습니다: {e}"), file=sys.stderr)
         return None
-    print("=== 최종 결과 ===")
+    print(green(bold("\n=== 최종 결과 ===")))
     print(result)
     return result
 
@@ -109,7 +110,7 @@ def summarize_session_if_needed(session_history: list[str]) -> list[str]:
     try:
         summary = summarize_entries(to_summarize)
     except AllProvidersFailedError as e:
-        print(f"[경고] 세션 요약에 실패해 오래된 기록을 요약 없이 정리합니다: {e}", file=sys.stderr)
+        print(yellow(f"[경고] 세션 요약에 실패해 오래된 기록을 요약 없이 정리합니다: {e}"), file=sys.stderr)
         return trim_session(session_history)
     return trim_session([f"{SUMMARY_PREFIX}{summary}"] + recent)
 
@@ -118,7 +119,7 @@ def load_session_safely() -> list[str]:
     try:
         return load_session()
     except SessionError as e:
-        print(f"[경고] 이전 세션을 불러오지 못해 새로 시작합니다: {e}", file=sys.stderr)
+        print(yellow(f"[경고] 이전 세션을 불러오지 못해 새로 시작합니다: {e}"), file=sys.stderr)
         return []
 
 
@@ -126,15 +127,15 @@ def save_session_safely(session_history: list[str]) -> None:
     try:
         save_session(session_history)
     except SessionError as e:
-        print(f"[경고] 세션을 저장하지 못했습니다: {e}", file=sys.stderr)
+        print(yellow(f"[경고] 세션을 저장하지 못했습니다: {e}"), file=sys.stderr)
 
 
 def run_interactive() -> None:
-    print("mogrid 에이전트 (종료: exit 또는 Ctrl+D, 세션 초기화: reset)")
+    print(bold(cyan("mogrid")) + " 에이전트 " + dim("(종료: exit 또는 Ctrl+D, 세션 초기화: reset)"))
     session_history = load_session_safely()
     while True:
         try:
-            task = input("\n작업 > ").strip()
+            task = input(f"\n{bold(cyan('작업 >'))} ").strip()
         except EOFError:
             print()
             break
@@ -148,7 +149,7 @@ def run_interactive() -> None:
         if task == "reset":
             session_history = []
             save_session_safely(session_history)
-            print("세션을 초기화했습니다.")
+            print(dim("세션을 초기화했습니다."))
             continue
         result = run_task(task, session_history, confirm=interactive_confirm)
         if result is not None:

@@ -3,6 +3,7 @@ import os
 from typing import Callable
 
 from agent_loop.text_utils import cap_entries
+from colors import cyan, dim, yellow
 from router.fallback import AllProvidersFailedError, call_llm
 from tools.exec_tools import kill_all_processes
 from tools.registry import TOOL_SCHEMAS, ToolError, call_tool
@@ -154,7 +155,7 @@ def run_agent(
                 # 모델이 매 턴 만들어내는 형식 오류는 provider 장애와 달리 "다시 시도하면
                 # 되는" 종류다 — 여기서 바로 죽이면 이미 성공한 이전 스텝들까지 다 날아가니,
                 # history에 남겨서 다음 스텝에서 모델 스스로 고치게 한다.
-                print(f"[agent_loop] step {step}: JSON 파싱 실패 - {e}")
+                print(yellow(f"[agent_loop] step {step}: JSON 파싱 실패 - {e}"))
                 history.append(
                     f"[{step}] 에러: 이전 응답이 올바른 JSON이 아니었다 ({e}). "
                     "반드시 {\"tool\": ...} 또는 {\"final\": ...} 형식의 JSON 객체 하나만 응답해라."
@@ -168,7 +169,7 @@ def run_agent(
             if "tool" in parsed:
                 tool_name = parsed["tool"]
                 tool_args = parsed.get("args", {})
-                print(f"[agent_loop] step {step}: {tool_name}({tool_args}) 호출")
+                print(dim(f"[agent_loop] step {step}: ") + cyan(f"{tool_name}({tool_args})") + dim(" 호출"))
                 try:
                     reason = requires_confirmation(tool_name, tool_args)
                     if reason and confirm is not None and not confirm(reason):
@@ -180,7 +181,7 @@ def run_agent(
                 history = cap_entries(history, MAX_HISTORY_ENTRIES, MAX_HISTORY_ENTRY_CHARS)
                 continue
 
-            print(f"[agent_loop] step {step}: 응답에 'tool'도 'final'도 없음 - {parsed}")
+            print(yellow(f"[agent_loop] step {step}: 응답에 'tool'도 'final'도 없음 - {parsed}"))
             history.append(
                 f"[{step}] 에러: 응답에 'tool'도 'final'도 없다: {parsed}. "
                 "반드시 {\"tool\": ...} 또는 {\"final\": ...} 형식으로 응답해라."

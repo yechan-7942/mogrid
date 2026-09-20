@@ -1,3 +1,4 @@
+from colors import yellow
 from router.gemini_client import GeminiError, call_gemini
 from router.groq_client import GroqError, call_groq
 from router.mistral_client import MistralError, call_mistral
@@ -42,7 +43,7 @@ def call_llm(prompt: str) -> str:
         try:
             return call_fn(prompt)
         except error_cls as e:
-            print(f"[fallback] {name} 실패, 다음 provider로 전환: {e}")
+            print(yellow(f"[fallback] {name} 실패, 다음 provider로 전환: {e}"))
             failures.append(f"{name}: {e}")
 
     raise AllProvidersFailedError(
