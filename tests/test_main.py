@@ -9,6 +9,7 @@ from main import (
     PROVIDER_SETUP,
     interactive_confirm,
     one_shot_confirm,
+    run_check_models,
     run_setup,
     summarize_session_if_needed,
 )
@@ -100,6 +101,26 @@ class RunSetupTests(unittest.TestCase):
         with redirect_stdout(buf):
             run_setup()
         self.assertNotIn("key-value", buf.getvalue())
+
+
+class RunCheckModelsTests(unittest.TestCase):
+    @patch("main.run_all_checks")
+    def test_all_ok_returns_zero(self, mock_run_all_checks):
+        mock_run_all_checks.return_value = [
+            ("Groq", "ok", "모델 사용 가능"),
+            ("Ollama", "skipped", "연결 불가"),
+        ]
+        self.assertEqual(run_check_models(), 0)
+
+    @patch("main.run_all_checks")
+    def test_missing_model_returns_nonzero(self, mock_run_all_checks):
+        mock_run_all_checks.return_value = [("Groq", "missing", "모델이 사라짐")]
+        self.assertEqual(run_check_models(), 1)
+
+    @patch("main.run_all_checks")
+    def test_error_returns_nonzero(self, mock_run_all_checks):
+        mock_run_all_checks.return_value = [("Groq", "error", "조회 실패")]
+        self.assertEqual(run_check_models(), 1)
 
 
 class InteractiveConfirmTests(unittest.TestCase):

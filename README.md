@@ -51,6 +51,15 @@ API 키를 발급받아 `.env`에 넣어야 한다. `mogrid setup`을 실행하�
 mogrid setup
 ```
 
+무료 티어 모델은 며칠 사이에도 사라지거나 유료로 바뀌는 일이 흔하다. `mogrid
+check-models`를 실행하면 각 provider의 `/models` 목록을 실제로 조회해서, 코드에
+적힌 기본 모델이 아직 살아있는지 한 번에 확인해준다 (키가 없는 provider는
+건너뛴다). 하나라도 누락/에러면 종료 코드 1을 반환한다.
+
+```bash
+mogrid check-models
+```
+
 ## 사용법
 
 ```bash

@@ -12,6 +12,7 @@ from agent_loop.session import MAX_SESSION_ENTRIES, SessionError, load_session, 
 from agent_loop.summarizer import SUMMARY_PREFIX, summarize_entries
 from colors import bold, cyan, dim, green, red, yellow
 from router.fallback import AllProvidersFailedError
+from router.health_check import run_all_checks
 
 PROVIDER_SETUP = [
     ("GROQ_API_KEY", "Groq", "https://console.groq.com/keys"),
@@ -61,6 +62,22 @@ def run_setup() -> None:
         print(f"{label} 저장 완료.")
 
     print("\n설정 완료. mogrid를 실행하면 방금 저장한 키들이 자동으로 로드된다.")
+
+
+_STATUS_LABELS = {"ok": "OK", "missing": "누락", "error": "에러", "skipped": "건너뜀"}
+_STATUS_COLORS = {"ok": green, "missing": red, "error": red, "skipped": dim}
+
+
+def run_check_models() -> int:
+    print(bold(cyan("provider별 기본 모델 가용성 확인 중...\n")))
+    exit_code = 0
+    for provider, status, detail in run_all_checks():
+        color = _STATUS_COLORS.get(status, dim)
+        label = _STATUS_LABELS.get(status, status)
+        print(f"[{color(label)}] {provider}: {detail}")
+        if status in ("missing", "error"):
+            exit_code = 1
+    return exit_code
 
 
 def interactive_confirm(reason: str) -> bool:
@@ -162,6 +179,8 @@ def main() -> None:
     if len(sys.argv) >= 2 and sys.argv[1] == "setup":
         run_setup()
         return
+    if len(sys.argv) >= 2 and sys.argv[1] == "check-models":
+        sys.exit(run_check_models())
 
     parser = argparse.ArgumentParser(
         prog="mogrid",
@@ -172,7 +191,8 @@ def main() -> None:
         nargs="?",
         default=None,
         help="한 번 실행할 작업 설명. 생략하면 대화형 모드로 진입한다. "
-        "'setup'을 주면 provider API 키 설정 마법사를 실행한다.",
+        "'setup'을 주면 provider API 키 설정 마법사를, 'check-models'를 주면 "
+        "각 provider의 기본 모델이 아직 살아있는지 확인한다.",
     )
     parser.add_argument(
         "--yes",
