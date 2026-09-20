@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from typing import Callable
 
 from agent_loop.text_utils import cap_entries
@@ -22,6 +23,25 @@ MAX_STEPS = 25
 # 매 프롬프트에 재삽입되는 history가 무한정 커져 컨텍스트/rate limit을 넘길 수 있다).
 MAX_HISTORY_ENTRIES = 15
 MAX_HISTORY_ENTRY_CHARS = 3000
+
+# 약한 모델이 tool을 한 번도 호출하지 않고 "파일을 만들었다/고쳤다"고 말로만 끝내는
+# 경우가 실사용 중 재현됨 (README 알려진 한계) — 프롬프트 규칙만으로는 안 지켜지므로,
+# 최종 답변이 파일 작업 완료를 주장하는데 history에 write_file/edit_file/append_file
+# 호출 기록이 전혀 없으면 기계적으로 걸러낸다.
+FILE_MUTATING_TOOLS = {"write_file", "edit_file", "append_file"}
+_FILE_ACTION_KEYWORDS = (
+    "생성되었", "생성했", "생성이 완료", "만들었습니다", "만들어졌습니다",
+    "작성되었", "작성했습니다", "저장되었", "저장했습니다", "수정되었", "수정했습니다",
+)
+_FILE_PATH_PATTERN = re.compile(r"[\w./-]+\.[a-zA-Z]{1,5}")
+
+
+def claims_unverified_file_action(final_text: str, history: list[str]) -> bool:
+    if any(f"tool={tool}" in entry for entry in history for tool in FILE_MUTATING_TOOLS):
+        return False
+    if not _FILE_PATH_PATTERN.search(final_text):
+        return False
+    return any(keyword in final_text for keyword in _FILE_ACTION_KEYWORDS)
 
 
 class AgentLoopError(Exception):
@@ -66,6 +86,9 @@ def build_system_prompt() -> str:
         "write_file/append_file을 사용해라.\n"
         "- 작업 설명에 없는 폴더 구조를 임의로 새로 만들지 마라. 특히 파일 경로가 이미 "
         "명확히 주어졌다면 make_dir를 쓰지 말고 그 경로에 바로 써라.\n"
+        "- 파일을 생성/수정/저장했다고 최종 답변에 적으려면, 그 전에 반드시 write_file/"
+        "edit_file/append_file 중 하나를 실제로 호출해서 성공한 뒤여야 한다. tool을 "
+        "호출하지 않고 파일 작업을 완료했다고 주장하는 답변은 절대 하지 마라.\n"
         "- 이미 필요한 정보를 다 확인했다면 (예: 파일이 존재하지 않는다는 것을 확인한 "
         "경우 포함) 같은 조사를 반복하지 말고 즉시 최종 답변으로 보고해라.\n"
         "- 바로 직전 스텝과 완전히 동일한 tool/args를 다시 호출하지 마라. 이미 그 결과를 "
@@ -164,7 +187,22 @@ def run_agent(
                 continue
 
             if "final" in parsed:
-                return parsed["final"]
+                final_text = parsed["final"]
+                if claims_unverified_file_action(final_text, history):
+                    print(
+                        yellow(
+                            f"[agent_loop] step {step}: tool 호출 없이 파일 작업 완료를 "
+                            "주장함 - 재시도 요청"
+                        )
+                    )
+                    history.append(
+                        f"[{step}] 에러: write_file/edit_file/append_file 중 아무것도 "
+                        "호출하지 않았는데 파일을 생성/수정했다고 답변했다. 실제로 tool을 "
+                        "호출해서 파일을 만든 뒤에만 완료를 보고해라."
+                    )
+                    history = cap_entries(history, MAX_HISTORY_ENTRIES, MAX_HISTORY_ENTRY_CHARS)
+                    continue
+                return final_text
 
             if "tool" in parsed:
                 tool_name = parsed["tool"]

@@ -4,7 +4,13 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from agent_loop.loop import AgentLoopError, extract_json, requires_confirmation, run_agent
+from agent_loop.loop import (
+    AgentLoopError,
+    claims_unverified_file_action,
+    extract_json,
+    requires_confirmation,
+    run_agent,
+)
 from router.fallback import AllProvidersFailedError
 from tools.registry import ToolError
 from tools.sandbox import PROJECT_ROOT_ENV
@@ -82,6 +88,27 @@ class RequiresConfirmationTests(unittest.TestCase):
         ]
         for name in safe_tools:
             self.assertIsNone(requires_confirmation(name, {}))
+
+
+class ClaimsUnverifiedFileActionTests(unittest.TestCase):
+    def test_flags_completion_claim_with_no_tool_calls(self):
+        final_text = (
+            "가계부 프로그램 생성이 완료되었습니다. `household_account/account_book.py` "
+            "파일이 생성되었습니다."
+        )
+        self.assertTrue(claims_unverified_file_action(final_text, []))
+
+    def test_allows_completion_claim_backed_by_a_tool_call(self):
+        final_text = "`account_book.py` 파일이 생성되었습니다."
+        history = ["[1] tool=write_file args={'path': 'account_book.py'} -> 저장 완료"]
+        self.assertFalse(claims_unverified_file_action(final_text, history))
+
+    def test_allows_answers_without_a_file_path(self):
+        self.assertFalse(claims_unverified_file_action("작업이 완료되었습니다.", []))
+
+    def test_allows_answers_that_do_not_claim_completion(self):
+        final_text = "`account_book.py`라는 파일은 존재하지 않는 것을 확인했습니다."
+        self.assertFalse(claims_unverified_file_action(final_text, []))
 
 
 class RunAgentConfirmationGatingTests(unittest.TestCase):
@@ -207,6 +234,31 @@ class RunAgentTests(unittest.TestCase):
         with self.assertRaises(AgentLoopError):
             run_agent("아무 작업", max_steps=2)
         self.assertEqual(mock_call_llm.call_count, 2)
+
+    @patch("agent_loop.loop.call_tool")
+    @patch("agent_loop.loop.call_llm")
+    def test_final_claiming_file_creation_without_tool_call_is_rejected(
+        self, mock_call_llm, mock_call_tool
+    ):
+        # 실사용 중 재현된 버그: 모델이 write_file을 호출하지 않고 "파일을 만들었다"고
+        # 말로만 답변함 — 재시도를 요구해서 실제로 write_file을 호출하게 만들어야 한다.
+        mock_call_llm.side_effect = [
+            json.dumps({"final": "`account_book.py` 파일이 생성되었습니다."}),
+            json.dumps(
+                {"tool": "write_file", "args": {"path": "account_book.py", "content": "x"}}
+            ),
+            json.dumps({"final": "`account_book.py` 파일이 생성되었습니다."}),
+        ]
+        mock_call_tool.return_value = "저장 완료"
+
+        result = run_agent("가계부 만들어줘")
+
+        self.assertEqual(result, "`account_book.py` 파일이 생성되었습니다.")
+        mock_call_tool.assert_called_once_with(
+            "write_file", {"path": "account_book.py", "content": "x"}
+        )
+        second_prompt = mock_call_llm.call_args_list[1].args[0]
+        self.assertIn("호출하지 않았는데 파일을", second_prompt)
 
     @patch("agent_loop.loop.call_llm")
     def test_task_list_rendered_into_next_prompt(self, mock_call_llm):
