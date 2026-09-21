@@ -1,4 +1,6 @@
+import io
 import unittest
+from contextlib import redirect_stdout
 from unittest.mock import patch
 
 from router import fallback
@@ -48,6 +50,47 @@ class CallLlmTests(unittest.TestCase):
             call_llm("안녕")
         self.assertIn("fake1", str(ctx.exception))
         self.assertIn("fake2", str(ctx.exception))
+
+    @patch(
+        "router.fallback.PROVIDERS",
+        [("fake1", _fail, FakeProviderError), ("fake2", _ok, OtherFakeProviderError)],
+    )
+    def test_long_error_message_is_truncated_on_screen_but_not_in_failure_detail(self):
+        long_message = "x" * 5000
+
+        def _fail_long(prompt: str) -> str:
+            raise FakeProviderError(long_message)
+
+        with patch("router.fallback.PROVIDERS", [("fake1", _fail_long, FakeProviderError), ("fake2", _ok, OtherFakeProviderError)]):
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                call_llm("안녕")
+        printed = buf.getvalue()
+        # 화면에는 잘려서 나가야 한다 (reasoning 모델의 raw 응답 덤프로 터미널이
+        # 도배되는 걸 막기 위한 변경)
+        self.assertNotIn(long_message, printed)
+        self.assertIn("생략", printed)
+
+    @patch(
+        "router.fallback.PROVIDERS",
+        [("fake1", _fail, FakeProviderError), ("fake2", _fail, FakeProviderError)],
+    )
+    def test_all_failing_keeps_full_untruncated_detail_in_exception(self):
+        long_message = "y" * 5000
+
+        def _fail_long(prompt: str) -> str:
+            raise FakeProviderError(long_message)
+
+        with patch(
+            "router.fallback.PROVIDERS",
+            [("fake1", _fail_long, FakeProviderError), ("fake2", _fail_long, FakeProviderError)],
+        ):
+            with redirect_stdout(io.StringIO()):
+                with self.assertRaises(AllProvidersFailedError) as ctx:
+                    call_llm("안녕")
+        # 전부 실패했을 때 던지는 예외에는 잘리지 않은 전체 메시지가 남아있어야
+        # 나중에 진짜 원인을 디버깅할 수 있다.
+        self.assertIn(long_message, str(ctx.exception))
 
     def test_second_provider_not_called_when_first_succeeds(self):
         second_calls = []
