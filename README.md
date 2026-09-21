@@ -38,14 +38,35 @@
 
 ## 설치
 
+### 전역 설치 (어느 터미널/어느 디렉터리에서든 `mogrid` 실행)
+
+```bash
+uv tool install --editable .
+```
+
+[uv](https://docs.astral.sh/uv/)가 저장소를 격리된 환경에 설치하고 `mogrid`
+실행 파일을 `~/.local/bin`(PATH에 이미 잡혀 있어야 함)에 연결해준다.
+`--editable`이라 저장소 코드를 수정하면 재설치 없이 바로 반영된다. 지울 때는
+`uv tool uninstall mogrid`.
+
+### 개발용 설치 (이 저장소 안에서만)
+
 ```bash
 python3 -m venv venv && source venv/bin/activate
 pip install -e .
 ```
 
+이 방식은 venv를 활성화한 셸에서만 `mogrid`가 잡힌다. 코드를 직접 고치며
+개발할 때 쓰고, 어디서든 커맨드로 쓰고 싶으면 위 전역 설치를 쓴다.
+
+### API 키 설정
+
 API 키를 발급받아 `.env`에 넣어야 한다. `mogrid setup`을 실행하면 provider별
 키 발급 페이지를 브라우저로 열어주고, 붙여넣은 키를 `.env`에 저장해준다
-(로그인/발급은 직접 해야 한다).
+(로그인/발급은 직접 해야 한다). `.env`는 현재 디렉터리부터 위로 올라가며 찾으니,
+전역 설치로 쓸 때는 키를 어디에 두고 싶은지에 따라 실행 위치를 정하면 된다 —
+예를 들어 홈 디렉터리에서 `mogrid setup`을 한 번 해두면 하위 어느 폴더에서
+실행해도 그 키를 찾는다.
 
 ```bash
 mogrid setup
