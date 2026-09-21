@@ -25,17 +25,6 @@
 5. 세션 기록은 프로젝트 디렉토리별로 분리해서 저장하고, 너무 길어지면 통째로
    자르는 대신 넘치는 만큼만 LLM으로 요약해서 압축한다.
 
-## 폴더 구조
-
-| 경로 | 역할 |
-|---|---|
-| `router/` | provider별 API 클라이언트 + 폴백 로직 |
-| `agent_loop/` | 요청-응답-tool실행 루프, 세션 영속성/요약 |
-| `tools/` | 모델이 호출할 수 있는 함수들 (파일 조작, 명령 실행, 작업 추적) |
-| `tests/` | unittest 테스트 스위트 (provider별, tool별, agent_loop, session) |
-| `main.py` | CLI 진입점 (한 번 실행 모드 / 대화형 모드 / `setup`) |
-| `.github/workflows/test.yml` | push/PR마다 테스트 스위트 자동 실행 |
-
 ## 설치
 
 ### 전역 설치 (어느 터미널/어느 디렉터리에서든 `mogrid` 실행)
@@ -61,32 +50,29 @@ pip install -e .
 
 ### API 키 설정
 
-API 키를 발급받아 `.env`에 넣어야 한다. `mogrid setup`을 실행하면 provider별
-키 발급 페이지를 브라우저로 열어주고, 붙여넣은 키를 `.env`에 저장해준다
-(로그인/발급은 직접 해야 한다). `.env`는 현재 디렉터리부터 위로 올라가며 찾으니,
-전역 설치로 쓸 때는 키를 어디에 두고 싶은지에 따라 실행 위치를 정하면 된다 —
-예를 들어 홈 디렉터리에서 `mogrid setup`을 한 번 해두면 하위 어느 폴더에서
-실행해도 그 키를 찾는다.
-
 ```bash
 mogrid setup
 ```
 
-무료 티어 모델은 며칠 사이에도 사라지거나 유료로 바뀌는 일이 흔하다. `mogrid
-check-models`를 실행하면 각 provider의 `/models` 목록을 실제로 조회해서, 코드에
-적힌 기본 모델이 아직 살아있는지 한 번에 확인해준다 (키가 없는 provider는
-건너뛴다). 하나라도 누락/에러면 종료 코드 1을 반환한다.
-
-```bash
-mogrid check-models
-```
+provider별 키 발급 페이지를 브라우저로 열어주고, 붙여넣은 키를 `.env`에
+저장해준다 (로그인/발급은 직접 해야 한다). `.env`는 실행한 위치부터 위로
+올라가며 찾으므로, 전역 설치로 쓸 때는 키를 어디서든 찾게 하고 싶으면 홈
+디렉터리에서 `mogrid setup`을 한 번 해두면 된다.
 
 ## 사용법
 
 ```bash
 mogrid                # 대화형 모드
 mogrid "작업 설명"     # 한 번 실행 모드
+mogrid setup           # provider API 키 설정 마법사
+mogrid check-models    # provider별 기본 모델이 아직 살아있는지 점검
 ```
+
+대화형 모드로 들어가면 환영 배너에서 provider 설정 현황과 현재 작업
+디렉터리를 보여준다. `check-models`는 각 provider의 `/models` 목록을 실제로
+조회해서 코드에 적힌 기본 모델이 아직 살아있는지 확인한다 (키가 없는
+provider는 건너뛴다) — 무료 티어 모델은 며칠 사이에도 사라지거나 유료로
+바뀌는 일이 흔해서, 하나라도 누락/에러면 종료 코드 1을 반환한다.
 
 한 번 실행 모드에서는 `run_command`, 기존 파일 덮어쓰기 같은 위험한 행동을 기본
 차단한다. 확인 없이 바로 실행하려면:
@@ -117,6 +103,19 @@ notes.txt에 한 줄을 추가했고, git status로 반영된 것을 확인했�
 첫 provider(groq)가 실패해도 라우터가 자동으로 gemini로 넘어가고, 기존 내용을
 보존하는 `append_file`은 확인 없이 바로 실행되지만 `run_command`는 확인을 거친다.
 
+## 폴더 구조
+
+| 경로 | 역할 |
+|---|---|
+| `router/` | provider별 API 클라이언트 + 폴백 로직, provider별 모델 가용성 점검(`health_check.py`) |
+| `agent_loop/` | 요청-응답-tool실행 루프, 세션 영속성/요약 |
+| `tools/` | 모델이 호출할 수 있는 함수들 (파일 조작, 명령 실행, 작업 추적) |
+| `tests/` | unittest 테스트 스위트 (provider별, tool별, agent_loop, session) |
+| `main.py` | CLI 진입점 (대화형 모드 / 한 번 실행 모드 / `setup` / `check-models`) |
+| `banner.py` | 대화형 모드 시작 시 보여주는 환영 배너 |
+| `colors.py` | 터미널 컬러 출력 (TTY/`NO_COLOR` 자동 감지) |
+| `.github/workflows/test.yml` | push/PR마다 테스트 스위트 자동 실행 |
+
 ## 테스트
 
 ```bash
@@ -145,7 +144,7 @@ python3 -m unittest discover -s tests -t .
   이 패턴에서 벗어난 새로운 형태의 "말로만 때우기"까지 다 잡아내지는 못한다.
 - **무료 티어 모델 로스터가 자주 바뀐다.** provider가 기본으로 쓰던 모델이 며칠 뒤
   통째로 사라지거나(404) 유료 전환되는 일이 흔하다. 코드에 적힌 모델 이름을 그대로
-  믿지 말고, 새로 셋업할 때는 각 provider의 `/models` 목록을 실제로 조회해서 확인할 것.
+  믿지 말고, `mogrid check-models`로 실제 가용성을 확인할 것.
 - **추론(reasoning) 모델은 최종 답을 빈 문자열로 반환할 때가 있다.** 추론 토큰이
   응답 예산을 다 써버리면 `content`가 비어서 반환되는 provider가 있음 — 이런 경우
   해당 provider 호출을 명시적으로 실패 처리하고 다음 provider로 넘기도록 처리되어
@@ -154,8 +153,9 @@ python3 -m unittest discover -s tests -t .
 
 ## 참고
 
+- API 키는 항상 `.env`에서 읽고, 하드코딩하지 않는다.
 - 출력은 터미널(TTY)에서만 색이 입혀지고, 파이프로 리다이렉트되거나 `NO_COLOR`
   환경변수가 설정되어 있으면 자동으로 일반 텍스트로 나간다 (`colors.py`).
-- API 키는 항상 `.env`에서 읽고, 하드코딩하지 않는다.
-- Ollama는 로컬 서버(기본 `http://localhost:11434`)라 API 키가 없고, 콜드 스타트
-  시 응답까지 2~3분 걸릴 수 있어 timeout을 다른 provider보다 훨씬 크게 잡아뒀다.
+- Ollama는 로컬 서버(기본 `http://localhost:11434`, `OLLAMA_BASE_URL`로 변경
+  가능)라 API 키가 없고, 콜드 스타트 시 응답까지 2~3분 걸릴 수 있어 timeout을
+  다른 provider보다 훨씬 크게 잡아뒀다.
