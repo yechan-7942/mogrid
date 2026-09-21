@@ -2,7 +2,7 @@ import argparse
 import os
 import sys
 import webbrowser
-from getpass import getpass
+from getpass import getpass, getuser
 from typing import Callable
 
 from dotenv import find_dotenv, load_dotenv, set_key
@@ -10,6 +10,7 @@ from dotenv import find_dotenv, load_dotenv, set_key
 from agent_loop.loop import AgentLoopError, run_agent
 from agent_loop.session import MAX_SESSION_ENTRIES, SessionError, load_session, save_session, trim_session
 from agent_loop.summarizer import SUMMARY_PREFIX, summarize_entries
+from banner import render_welcome_banner
 from colors import bold, cyan, dim, green, red, yellow
 from router.fallback import AllProvidersFailedError
 from router.health_check import run_all_checks
@@ -148,7 +149,11 @@ def save_session_safely(session_history: list[str]) -> None:
 
 
 def run_interactive() -> None:
-    print(bold(cyan("mogrid")) + " 에이전트 " + dim("(종료: exit 또는 Ctrl+D, 세션 초기화: reset)"))
+    try:
+        user = getuser()
+    except OSError:
+        user = None
+    print(render_welcome_banner(user=user))
     session_history = load_session_safely()
     while True:
         try:

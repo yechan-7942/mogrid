@@ -16,5 +16,5 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-py-modules = ["main", "colors"]
+py-modules = ["main", "colors", "banner"]
 packages = ["agent_loop", "router", "tools"]
