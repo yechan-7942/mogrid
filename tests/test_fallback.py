@@ -1,4 +1,6 @@
 import io
+import os
+import tempfile
 import unittest
 from contextlib import redirect_stdout
 from unittest.mock import patch
@@ -23,8 +25,25 @@ def _fail(prompt: str) -> str:
     raise FakeProviderError("일부러 실패")
 
 
-class CallLlmTests(unittest.TestCase):
+class UsageIsolatedTestCase(unittest.TestCase):
+    """call_llm()이 record_success/record_failure로 실제 ~/.mogrid/usage.json을
+    건드리지 않도록, 매 테스트를 임시 파일로 격리한다."""
+
     def setUp(self):
+        self._usage_tmpdir = tempfile.TemporaryDirectory()
+        self._usage_patch = patch(
+            "router.usage.USAGE_FILE", os.path.join(self._usage_tmpdir.name, "usage.json")
+        )
+        self._usage_patch.start()
+
+    def tearDown(self):
+        self._usage_patch.stop()
+        self._usage_tmpdir.cleanup()
+
+
+class CallLlmTests(UsageIsolatedTestCase):
+    def setUp(self):
+        super().setUp()
         fallback._reset_rotation()
 
     @patch(
@@ -107,12 +126,14 @@ class CallLlmTests(unittest.TestCase):
         self.assertEqual(second_calls, [])
 
 
-class RotationTests(unittest.TestCase):
+class RotationTests(UsageIsolatedTestCase):
     def setUp(self):
+        super().setUp()
         fallback._reset_rotation()
 
     def tearDown(self):
         fallback._reset_rotation()
+        super().tearDown()
 
     def test_starting_provider_rotates_across_calls(self):
         calls = []

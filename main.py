@@ -12,8 +12,9 @@ from agent_loop.session import MAX_SESSION_ENTRIES, SessionError, load_session, 
 from agent_loop.summarizer import SUMMARY_PREFIX, summarize_entries
 from banner import render_welcome_banner
 from colors import bold, cyan, dim, green, red, yellow
-from router.fallback import AllProvidersFailedError
+from router.fallback import PROVIDERS, AllProvidersFailedError
 from router.health_check import run_all_checks
+from router.usage import UsageError, load_usage
 
 PROVIDER_SETUP = [
     ("GROQ_API_KEY", "Groq", "https://console.groq.com/keys"),
@@ -79,6 +80,47 @@ def run_check_models() -> int:
         if status in ("missing", "error"):
             exit_code = 1
     return exit_code
+
+
+_PROVIDER_DISPLAY_NAMES = {
+    "groq": "Groq",
+    "gemini": "Gemini",
+    "openrouter": "OpenRouter",
+    "mistral": "Mistral",
+    "nvidia": "NVIDIA NIM",
+    "ollama": "Ollama",
+}
+
+
+def run_status() -> int:
+    try:
+        data = load_usage()
+    except UsageError as e:
+        print(red(f"[에러] 사용량 파일을 읽지 못했습니다: {e}"), file=sys.stderr)
+        return 1
+
+    print(bold(cyan("provider별 사용량 (mogrid를 통해 호출된 기록 기준)\n")))
+    for name, _, _ in PROVIDERS:
+        label = _PROVIDER_DISPLAY_NAMES.get(name, name)
+        record = data.get(name)
+        if not record:
+            print(f"[{dim('기록 없음')}] {label}")
+            continue
+
+        today = f"오늘 성공 {record['today_success']}회"
+        if record["today_fail"]:
+            today += f", 실패 {record['today_fail']}회"
+        total = f"전체 성공 {record['total_success']}회"
+        if record["total_fail"]:
+            total += f", 실패 {record['total_fail']}회"
+        last_used = record.get("last_used") or "-"
+
+        print(f"[{green('사용됨')}] {label}: {today} / {total} (마지막 성공: {last_used})")
+        if record.get("last_error"):
+            print(dim(f"    마지막 실패 사유: {record['last_error'][:200]}"))
+
+    print(dim("\n실제 provider 쪽 잔여 할당량이 아니라, mogrid를 거쳐 호출된 횟수입니다."))
+    return 0
 
 
 def interactive_confirm(reason: str) -> bool:
@@ -173,6 +215,9 @@ def run_interactive() -> None:
             save_session_safely(session_history)
             print(dim("세션을 초기화했습니다."))
             continue
+        if task == "status":
+            run_status()
+            continue
         result = run_task(task, session_history, confirm=interactive_confirm)
         if result is not None:
             session_history.append(f"작업: {task}\n결과: {result}")
@@ -186,6 +231,8 @@ def main() -> None:
         return
     if len(sys.argv) >= 2 and sys.argv[1] == "check-models":
         sys.exit(run_check_models())
+    if len(sys.argv) >= 2 and sys.argv[1] == "status":
+        sys.exit(run_status())
 
     parser = argparse.ArgumentParser(
         prog="mogrid",
@@ -197,7 +244,8 @@ def main() -> None:
         default=None,
         help="한 번 실행할 작업 설명. 생략하면 대화형 모드로 진입한다. "
         "'setup'을 주면 provider API 키 설정 마법사를, 'check-models'를 주면 "
-        "각 provider의 기본 모델이 아직 살아있는지 확인한다.",
+        "각 provider의 기본 모델이 아직 살아있는지, 'status'를 주면 provider별 "
+        "호출 사용량을 확인한다.",
     )
     parser.add_argument(
         "--yes",

@@ -5,6 +5,7 @@ from router.mistral_client import MistralError, call_mistral
 from router.nvidia_client import NvidiaError, call_nvidia
 from router.ollama_client import OllamaError, call_ollama
 from router.openrouter_client import OpenRouterError, call_openrouter
+from router.usage import record_failure, record_success
 
 PROVIDERS = [
     ("groq", call_groq, GroqError),
@@ -54,7 +55,7 @@ def call_llm(prompt: str) -> str:
 
     for name, call_fn, error_cls in order:
         try:
-            return call_fn(prompt)
+            result = call_fn(prompt)
         except error_cls as e:
             error_text = str(e)
             print(
@@ -64,6 +65,10 @@ def call_llm(prompt: str) -> str:
                 )
             )
             failures.append(f"{name}: {error_text}")
+            record_failure(name, error_text)
+            continue
+        record_success(name)
+        return result
 
     raise AllProvidersFailedError(
         "모든 provider가 실패했습니다.\n" + "\n".join(failures)

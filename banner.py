@@ -76,6 +76,7 @@ def render_welcome_banner(user: str | None = None) -> str:
         ("Tips", False),
         ("  · mogrid setup         provider API 키 설정", False),
         ("  · mogrid check-models  모델 가용성 점검", False),
+        ("  · status               provider별 사용량 확인", False),
         ("  · reset / exit         세션 초기화 / 종료", False),
         ("", False),
         (f"provider {provider_count}/{_TOTAL_PROVIDERS} 사용 가능  ·  {cwd}", False),

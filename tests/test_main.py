@@ -11,9 +11,11 @@ from main import (
     one_shot_confirm,
     run_check_models,
     run_setup,
+    run_status,
     summarize_session_if_needed,
 )
 from router.fallback import AllProvidersFailedError
+from router.usage import UsageError
 
 
 class RunSetupTests(unittest.TestCase):
@@ -121,6 +123,41 @@ class RunCheckModelsTests(unittest.TestCase):
     def test_error_returns_nonzero(self, mock_run_all_checks):
         mock_run_all_checks.return_value = [("Groq", "error", "조회 실패")]
         self.assertEqual(run_check_models(), 1)
+
+
+class RunStatusTests(unittest.TestCase):
+    @patch("main.load_usage")
+    def test_reading_error_returns_nonzero(self, mock_load_usage):
+        mock_load_usage.side_effect = UsageError("읽기 실패")
+        self.assertEqual(run_status(), 1)
+
+    @patch("main.load_usage")
+    def test_no_usage_yet_returns_zero(self, mock_load_usage):
+        mock_load_usage.return_value = {}
+        self.assertEqual(run_status(), 0)
+
+    @patch("main.load_usage")
+    def test_provider_with_usage_is_shown(self, mock_load_usage):
+        import io
+        from contextlib import redirect_stdout
+
+        mock_load_usage.return_value = {
+            "groq": {
+                "total_success": 3,
+                "total_fail": 1,
+                "today_success": 2,
+                "today_fail": 0,
+                "last_used": "2026-09-22T10:00:00",
+                "last_error": "일부러 실패",
+            }
+        }
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            self.assertEqual(run_status(), 0)
+        output = buf.getvalue()
+        self.assertIn("Groq", output)
+        self.assertIn("3", output)
+        self.assertIn("일부러 실패", output)
 
 
 class InteractiveConfirmTests(unittest.TestCase):
