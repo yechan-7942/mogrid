@@ -1,6 +1,5 @@
 # Mogrid
 
-[![test](https://github.com/yechan-7942/mogrid/actions/workflows/test.yml/badge.svg)](https://github.com/yechan-7942/mogrid/actions/workflows/test.yml)
 
 무료 LLM API(Groq, Gemini, OpenRouter, Mistral, NVIDIA NIM) + 로컬 LLM(Ollama)을 여러 개
 묶은 CLI 에이전트. 터미널에서 할 일을 말로 던지면 Claude Code처럼 실제 파일을 직접
