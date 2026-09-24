@@ -5,6 +5,7 @@ __pycache__/
 .mogrid_session.json
 *.egg-info/
 CLAUDE.md
+AGENTS.md
 .DS_Store
 
 # 로컬 개발 환경 설정 — 사람마다 다르고, 커밋되면 안 되는 값이 섞이기 쉽다
