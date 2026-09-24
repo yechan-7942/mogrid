@@ -6,3 +6,9 @@ __pycache__/
 *.egg-info/
 CLAUDE.md
 .DS_Store
+
+# 로컬 개발 환경 설정 — 사람마다 다르고, 커밋되면 안 되는 값이 섞이기 쉽다
+# (.claude/settings.local.json에는 과거 실행한 명령이 그대로 저장돼서 API 키가
+#  헤더째 들어가는 경우가 있다).
+.claude/
+.envrc
