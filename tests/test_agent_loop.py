@@ -7,6 +7,7 @@ from unittest.mock import patch
 from agent_loop.loop import (
     AgentLoopError,
     add_not_found_hint,
+    build_system_prompt,
     claims_unverified_file_action,
     extract_json,
     requires_confirmation,
@@ -16,6 +17,20 @@ from router.fallback import AllProvidersFailedError
 from tools.registry import ToolError
 from tools.sandbox import PROJECT_ROOT_ENV
 from tools.task_tracker import render_task_list
+
+
+class BuildSystemPromptSkillsTests(unittest.TestCase):
+    def test_no_skills_omits_section_and_load_skill_tool(self):
+        # 스킬이 없는데 load_skill을 광고하면 약한 모델이 헛스텝을 쓴다.
+        prompt = build_system_prompt("")
+        self.assertNotIn("사용 가능한 스킬", prompt)
+        self.assertNotIn("load_skill", prompt)
+
+    def test_skill_index_is_included_with_load_skill_tool(self):
+        prompt = build_system_prompt("- run-tests: 테스트를 실행하는 절차")
+        self.assertIn("사용 가능한 스킬", prompt)
+        self.assertIn("run-tests", prompt)
+        self.assertIn("load_skill", prompt)
 
 
 class ExtractJsonTests(unittest.TestCase):

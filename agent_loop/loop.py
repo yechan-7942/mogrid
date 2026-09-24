@@ -10,6 +10,7 @@ from tools.exec_tools import kill_all_processes
 from tools.registry import TOOL_SCHEMAS, ToolError, call_tool
 from tools.sandbox import PathEscapesProjectRoot
 from tools.sandbox import resolve_path as _sandbox_resolve_path
+from tools.skills import discover_skills, render_skill_index
 from tools.task_tracker import render_task_list, reset_tasks
 
 # 확인 없이 실행하면 되돌리기 어렵거나 프로젝트 밖(예: git push)에 흔적을 남길 수 있는
@@ -66,15 +67,35 @@ class AgentLoopError(Exception):
     pass
 
 
-def build_system_prompt() -> str:
+def build_system_prompt(skill_index: str = "") -> str:
+    # 스킬이 하나도 없으면 load_skill 자체를 목록에서 뺀다. 남겨두면 약한 모델이 "있으니까
+    # 일단 불러보는" 헛스텝을 쓰고, 설명글만큼의 토큰도 매 스텝 낭비된다.
+    schemas = TOOL_SCHEMAS if skill_index else [t for t in TOOL_SCHEMAS if t["name"] != "load_skill"]
     tools_desc = "\n".join(
         f"- {t['name']}({', '.join(t['args'].keys())}): {t['description']}"
-        for t in TOOL_SCHEMAS
+        for t in schemas
+    )
+    # 목록에는 이름과 한 줄 설명만 들어간다 — 본문까지 넣으면 매 스텝 재전송되는
+    # 프롬프트가 스킬 개수만큼 불어난다. 본문은 load_skill로 필요할 때만 가져온다.
+    skills_section = (
+        f"사용 가능한 스킬 (관련 있으면 load_skill로 내용을 먼저 읽어라):\n{skill_index}\n\n"
+        if skill_index
+        else ""
+    )
+    # 규칙도 같이 빼야 한다 — 스킬이 없는데 규칙만 남으면 없는 tool을 쓰라고 시키는 꼴이다.
+    skill_rule = (
+        "- '사용 가능한 스킬' 목록에 지금 작업과 관련된 스킬이 있으면, 다른 일을 시작하기 "
+        "전에 먼저 load_skill로 그 내용을 읽고 거기 적힌 절차를 따라라. 스킬 내용은 이 "
+        "프로젝트에서 그 작업을 하는 정해진 방식이므로, 네 방식대로 임의로 바꾸지 마라. "
+        "관련된 스킬이 없으면 부르지 말고 그냥 진행해라.\n"
+        if skill_index
+        else ""
     )
     return (
         "너는 파일을 읽고 쓰며 작업을 수행하는 에이전트다.\n"
         "다음 tool들을 사용할 수 있다:\n"
         f"{tools_desc}\n\n"
+        f"{skills_section}"
         "규칙:\n"
         "- 파일 경로를 확실히 모르면 절대 추측하지 말고, "
         "list_files(path='.')로 현재 위치부터 확인해라.\n"
@@ -97,6 +118,7 @@ def build_system_prompt() -> str:
         "- search_files의 keyword는 기본적으로 대소문자 무시 부분 문자열이다. 여러 패턴 중 "
         "하나, 단어 경계, 줄 시작/끝처럼 부분 문자열로 표현할 수 없는 조건을 찾을 때만 "
         "regex=true로 정규식을 사용해라.\n"
+        f"{skill_rule}"
         "- 세 단계 이상 걸릴 것 같은 작업을 시작할 때는 update_task_list로 하위 작업 "
         "목록을 먼저 만들어라. 하위 작업을 하나 끝낼 때마다 그 항목만 completed로 바꿔서 "
         "전체 목록을 다시 제출해라 (매번 목록 전체를 통째로 제출, 일부만 보내지 마라). "
@@ -166,7 +188,12 @@ def run_agent(
     session_history: list[str] | None = None,
     confirm: Callable[[str], bool] | None = None,
 ) -> str:
-    system_prompt = build_system_prompt()
+    # 스킬 탐색은 루프 밖에서 한 번만 한다 — 프롬프트는 매 스텝 다시 만들지만, 디스크를
+    # 매 스텝 훑을 이유는 없다. (본문은 어차피 여기서 안 읽고 load_skill이 그때 읽는다.)
+    skills, skill_errors = discover_skills()
+    for path, message in skill_errors:
+        print(yellow(f"[skills] 건너뜀: {path} - {message}"))
+    system_prompt = build_system_prompt(render_skill_index(skills))
     history = []
     session_text = "\n\n".join(session_history) if session_history else "(없음)"
     reset_tasks()

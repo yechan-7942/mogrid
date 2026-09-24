@@ -15,6 +15,7 @@ from colors import bold, cyan, dim, green, red, yellow
 from router.fallback import PROVIDERS, AllProvidersFailedError
 from router.health_check import run_all_checks
 from router.usage import UsageError, load_usage
+from tools.skills import discover_skills, global_skills_dir, project_skills_dir
 
 PROVIDER_SETUP = [
     ("GROQ_API_KEY", "Groq", "https://console.groq.com/keys"),
@@ -123,6 +124,33 @@ def run_status() -> int:
     return 0
 
 
+def run_skills() -> int:
+    skills, errors = discover_skills()
+
+    print(bold(cyan("사용 가능한 스킬\n")))
+    if not skills:
+        print(dim("등록된 스킬이 없습니다."))
+    for skill in sorted(skills.values(), key=lambda s: s.name):
+        origin = "프로젝트" if skill.source == "project" else "전역"
+        print(f"[{green(origin)}] {bold(skill.name)}: {skill.description}")
+        print(dim(f"    {skill.path}"))
+
+    # 깨진 스킬은 조용히 빠지면 "왜 안 불러지지"로 한참 헤매게 된다 — 이 명령의 존재
+    # 이유 절반이 이 목록이다.
+    if errors:
+        print(red(bold("\n읽지 못한 스킬 파일\n")))
+        for path, message in errors:
+            print(f"[{red('에러')}] {path}: {message}")
+
+    print(
+        dim(
+            f"\n스킬 위치: {project_skills_dir()} (프로젝트), {global_skills_dir()} (전역). "
+            "이름이 같으면 프로젝트 쪽이 우선합니다."
+        )
+    )
+    return 1 if errors else 0
+
+
 def interactive_confirm(reason: str) -> bool:
     answer = input(f"\n{yellow(bold('[확인 필요]'))} {reason}\n진행할까요? (y/N): ").strip().lower()
     return answer == "y"
@@ -218,6 +246,9 @@ def run_interactive() -> None:
         if task == "status":
             run_status()
             continue
+        if task == "skills":
+            run_skills()
+            continue
         result = run_task(task, session_history, confirm=interactive_confirm)
         if result is not None:
             session_history.append(f"작업: {task}\n결과: {result}")
@@ -233,6 +264,8 @@ def main() -> None:
         sys.exit(run_check_models())
     if len(sys.argv) >= 2 and sys.argv[1] == "status":
         sys.exit(run_status())
+    if len(sys.argv) >= 2 and sys.argv[1] == "skills":
+        sys.exit(run_skills())
 
     parser = argparse.ArgumentParser(
         prog="mogrid",
@@ -245,7 +278,7 @@ def main() -> None:
         help="한 번 실행할 작업 설명. 생략하면 대화형 모드로 진입한다. "
         "'setup'을 주면 provider API 키 설정 마법사를, 'check-models'를 주면 "
         "각 provider의 기본 모델이 아직 살아있는지, 'status'를 주면 provider별 "
-        "호출 사용량을 확인한다.",
+        "호출 사용량을, 'skills'를 주면 등록된 스킬 목록을 확인한다.",
     )
     parser.add_argument(
         "--yes",

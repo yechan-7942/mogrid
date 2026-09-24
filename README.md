@@ -28,6 +28,8 @@
    받는다.
 5. 세션 기록은 프로젝트 디렉토리별로 나눠서 저장하고, 너무 길어지면 통째로 자르는
    대신 넘치는 만큼만 LLM으로 요약해서 압축한다.
+6. 자주 하는 작업의 절차는 **스킬**(마크다운 파일)로 적어두면, 관련된 작업일 때
+   모델이 알아서 불러다 그대로 따른다. 아래 [스킬](#스킬) 참고.
 
 ## 설치
 
@@ -69,6 +71,8 @@ mogrid                # 대화형 모드
 mogrid "작업 설명"     # 한 번 실행 모드
 mogrid setup           # provider API 키 설정 마법사
 mogrid check-models    # provider별 기본 모델이 아직 살아있는지 점검
+mogrid status          # provider별 호출 사용량
+mogrid skills          # 등록된 스킬 목록
 ```
 
 대화형 모드로 들어가면 환영 배너에서 provider 설정 현황과 현재 작업 디렉터리를
@@ -106,15 +110,58 @@ notes.txt에 한 줄을 추가했고, git status로 반영된 것을 확인했�
 첫 provider(groq)가 실패해도 라우터가 자동으로 gemini로 넘어가고, 기존 내용을
 보존하는 `append_file`은 확인 없이 바로 실행되지만 `run_command`는 확인을 거친다.
 
+## 스킬
+
+매번 같은 설명을 반복하는 대신, 작업 절차를 마크다운으로 적어두면 모델이 관련된
+작업일 때 알아서 불러다 따른다.
+
+```markdown
+---
+description: 새 LLM provider를 폴백 라우터에 추가할 때 따라야 할 절차
+---
+
+1. `router/<이름>_client.py`를 만든다. `groq_client.py`의 구조를 그대로 따른다.
+2. `router/fallback.py`의 `PROVIDERS`에 등록한다.
+3. 테스트를 만들되 `requests.post`를 반드시 모킹한다.
+```
+
+이 파일을 `.mogrid/skills/add-provider.md`로 저장하면 끝이다.
+
+```
+$ mogrid "NVIDIA 말고 Together AI도 폴백에 추가해줘"
+
+[agent_loop] step 1: load_skill({'name': 'add-provider'}) 호출
+[agent_loop] step 2: read_file({'path': 'router/groq_client.py'}) 호출
+...
+```
+
+**위치** — 프로젝트별 `.mogrid/skills/`와 전역 `~/.mogrid/skills/`(`MOGRID_SKILLS_DIR`로
+변경 가능). 이름이 같으면 프로젝트 쪽이 이긴다. 파일 이름이 곧 스킬 이름이고,
+참고 파일을 같이 두고 싶으면 `<이름>/SKILL.md` 형태도 된다.
+
+**왜 `description`이 중요한가** — mogrid는 스킬 **본문을 프롬프트에 넣지 않는다.**
+이름과 `description` 한 줄만 항상 보여주고, 본문은 모델이 `load_skill`을 호출했을 때만
+가져온다. 시스템 프롬프트는 매 스텝 통째로 재전송되기 때문에, 본문까지 상주시키면
+스킬 서너 개만 있어도 무료 티어 모델의 컨텍스트가 감당을 못 한다. 그래서 모델이
+"이 스킬을 부를지 말지"를 판단하는 근거는 오직 `description` 한 줄이다 — 언제 쓰는
+스킬인지가 거기 드러나야 한다.
+
+등록 상태와 잘못된 파일은 `mogrid skills`로 확인한다(대화형 모드에서는 `skills`).
+
+> 스킬 본문은 에이전트에게 주는 지시문이고, 에이전트는 `run_command`를 쓸 수 있다.
+> 남의 저장소를 클론해서 작업한다면 그 안의 `.mogrid/skills/`도 남이 쓴 지시문이니,
+> 내용을 한 번 보고 쓰는 게 안전하다.
+
 ## 폴더 구조
 
 | 경로 | 역할 |
 |---|---|
 | `router/` | provider별 API 클라이언트 + 폴백 로직, provider별 모델 가용성 점검(`health_check.py`) |
 | `agent_loop/` | 요청-응답-tool실행 루프, 세션 영속성/요약 |
-| `tools/` | 모델이 호출하는 파일 조작/명령 실행/작업 추적 tool들 |
-| `tests/` | unittest 테스트 스위트 (provider별, tool별, agent_loop, session) |
-| `main.py` | CLI 진입점 (대화형 모드 / 한 번 실행 모드 / `setup` / `check-models`) |
+| `tools/` | 모델이 호출하는 파일 조작/명령 실행/작업 추적 tool들, 스킬 탐색/로드(`skills.py`) |
+| `tests/` | unittest 테스트 스위트 (provider별, tool별, agent_loop, session, skills) |
+| `main.py` | CLI 진입점 (대화형 모드 / 한 번 실행 모드 / `setup` / `check-models` / `status` / `skills`) |
+| `.mogrid/skills/` | 이 저장소에서 쓰는 스킬 (작업 절차를 적어둔 마크다운) |
 | `banner.py` | 대화형 모드 시작 시 보여주는 환영 배너 |
 | `colors.py` | 터미널 컬러 출력 (TTY/`NO_COLOR` 자동 감지) |
 | `.github/workflows/test.yml` | push/PR마다 테스트 스위트 자동 실행 |

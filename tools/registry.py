@@ -9,6 +9,7 @@ from tools.file_tools import (
     search_files,
     write_file,
 )
+from tools.skills import load_skill
 from tools.task_tracker import update_task_list
 
 TOOL_SCHEMAS = [
@@ -97,6 +98,16 @@ TOOL_SCHEMAS = [
         },
     },
     {
+        "name": "load_skill",
+        "description": (
+            "'사용 가능한 스킬' 목록에 있는 스킬의 전체 내용을 불러온다. 스킬은 이 프로젝트에서 "
+            "특정 종류의 작업을 할 때 따라야 할 절차가 적힌 문서다. 목록의 설명을 보고 지금 "
+            "작업과 관련된 스킬이 있으면, 작업을 시작하기 전에 먼저 이걸로 내용을 읽어라. "
+            "목록에 없는 이름은 부를 수 없다."
+        ),
+        "args": {"name": "불러올 스킬 이름 (목록에 적힌 그대로)"},
+    },
+    {
         "name": "run_command",
         "description": (
             "허용된 명령어(npm, npx, node, yarn, pip, pip3, python, python3, pytest, uv, git, "
@@ -145,6 +156,7 @@ TOOLS = {
     "append_file": append_file,
     "make_dir": make_dir,
     "update_task_list": update_task_list,
+    "load_skill": load_skill,
     "run_command": run_command,
     "start_process": start_process,
     "check_process": check_process,
