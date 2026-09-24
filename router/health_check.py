@@ -95,13 +95,16 @@ def check_nvidia() -> CheckResult:
         return (
             "NVIDIA NIM",
             "ok",
-            f"{NVIDIA_DEFAULT_MODEL} 사용 가능 (폴백 모델 중 {len(missing_fallbacks)}개 "
+            f"{NVIDIA_DEFAULT_MODEL} 목록에 있음 (폴백 모델 중 {len(missing_fallbacks)}개는 "
             f"목록에 없음: {', '.join(missing_fallbacks)})",
         )
+    # "목록에 있음"까지만 말한다. NVIDIA는 /models에 멀쩡히 뜨는 모델이 호출하면 404를
+    # 내는 경우가 흔해서, 여기서 "사용 가능"이라고 단언하면 거짓 안심을 준다.
     return (
         "NVIDIA NIM",
         "ok",
-        f"{NVIDIA_DEFAULT_MODEL} 외 폴백 모델 {len(NVIDIA_FALLBACK_MODELS) - 1}개 모두 사용 가능",
+        f"{NVIDIA_DEFAULT_MODEL} 외 폴백 모델 {len(NVIDIA_FALLBACK_MODELS) - 1}개 모두 목록에 있음 "
+        "(목록에 있다고 호출까지 되는 건 아님 — 모델을 바꿀 때는 실제로 한 번 호출해볼 것)",
     )
 
 

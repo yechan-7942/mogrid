@@ -1,4 +1,5 @@
 import os
+import time
 
 import requests
 from dotenv import load_dotenv
@@ -10,15 +11,31 @@ DEFAULT_MODEL = "nvidia/nemotron-3-ultra-550b-a55b"
 
 # DEFAULT_MODEL이 과부하/한도초과로 실패해도, NVIDIA build는 같은 API 키로 여러 모델을
 # 무료 제공하니 provider 자체를 포기하기 전에 이 목록을 순서대로 소진한다.
-# (대형/고품질 모델 -> 중소형 모델 순. 실제 가용 여부는 `mogrid check-models`로 확인)
+#
+# 여기 있는 모델은 전부 "실제로 호출해서 응답을 받아본" 것만 남긴다. /models 목록에
+# 있다는 건 호출 가능하다는 뜻이 아니다 — 목록에 멀쩡히 뜨는데 호출하면 즉시 404를
+# 내는 모델이 절반이 넘는다(llama-3.1-nemotron-ultra-253b-v1, mistral-large-2-instruct,
+# nemotron-nano-3-30b-a3b, nemotron-4-340b-instruct, mixtral-8x22b, dbrx-instruct,
+# yi-large 등이 전부 그랬다). 그래서 `mogrid check-models`의 OK만 믿고 여기 추가하지
+# 말고, 반드시 아래처럼 한 번 호출해보고 넣어라:
+#   python3 -c "from router.nvidia_client import _call_nvidia_model; import os; \
+#     from dotenv import load_dotenv; load_dotenv(); \
+#     print(_call_nvidia_model('1+1?', '<모델>', 30, os.getenv('NVIDIA_API_KEY')))"
+# (짧은 시간에 여러 모델을 병렬로 두드리면 503/401로 막히니 순차로 확인할 것.)
 FALLBACK_MODELS = [
     DEFAULT_MODEL,
-    "nvidia/llama-3.1-nemotron-ultra-253b-v1",
+    "z-ai/glm-5.3",
     "nvidia/nemotron-3-super-120b-a12b",
-    "openai/gpt-oss-20b",
-    "mistralai/mistral-large-2-instruct",
-    "nvidia/nemotron-nano-3-30b-a3b",
+    "meta/muse-glimmer-30b",
+    "z-ai/glm-5.3-flash",
 ]
+
+# requests의 timeout은 "소켓 연산 하나"에 걸리는 값이라 총 소요시간을 보장하지 않는다.
+# 실제로 timeout=40을 준 호출이 991초를 매달린 적이 있다(연결은 살아 있는데 응답이
+# 계속 안 끝나는 경우). 모델을 여러 개 순회하는 구조에서는 이게 그대로 곱해지므로,
+# (연결, 읽기) 튜플로 각각 조이고 루프 전체에도 별도 예산을 둔다.
+CONNECT_TIMEOUT = 10
+TOTAL_BUDGET_MULTIPLIER = 2.5
 
 
 class NvidiaError(Exception):
@@ -40,7 +57,12 @@ def _call_nvidia_model(prompt: str, model: str, timeout: int, api_key: str) -> s
     }
 
     try:
-        response = requests.post(NVIDIA_API_URL, headers=headers, json=payload, timeout=timeout)
+        response = requests.post(
+            NVIDIA_API_URL,
+            headers=headers,
+            json=payload,
+            timeout=(CONNECT_TIMEOUT, timeout),
+        )
     except requests.exceptions.Timeout:
         raise NvidiaError(f"NVIDIA NIM({model}) 요청이 {timeout}초 내에 응답하지 않았습니다.")
     except requests.exceptions.ConnectionError:
@@ -87,10 +109,25 @@ def call_nvidia(prompt: str, model: str | None = None, timeout: int = 60) -> str
     if model is not None:
         return _call_nvidia_model(prompt, model, timeout, api_key)
 
+    # 모델 하나가 timeout을 꽉 채워도 나머지를 계속 도는 걸 막는다. 이게 없으면
+    # 느린 모델이 몇 개 걸릴 때 한 스텝이 수 분~수십 분 멈춰서, 폴백이 오히려
+    # 응답을 못 받게 만드는 역효과가 난다.
+    budget = timeout * TOTAL_BUDGET_MULTIPLIER
+    started = time.monotonic()
+
     failures = []
     for candidate in FALLBACK_MODELS:
+        elapsed = time.monotonic() - started
+        if elapsed >= budget:
+            failures.append(
+                f"남은 모델({', '.join(FALLBACK_MODELS[len(failures):])})은 "
+                f"전체 예산 {budget:.0f}초를 넘겨 시도하지 않았습니다."
+            )
+            break
+        # 남은 예산보다 긴 timeout을 주면 예산이 의미가 없어지므로 잘라서 넘긴다.
+        remaining = max(1, int(budget - elapsed))
         try:
-            return _call_nvidia_model(prompt, candidate, timeout, api_key)
+            return _call_nvidia_model(prompt, candidate, min(timeout, remaining), api_key)
         except NvidiaAccountError:
             raise
         except NvidiaError as e:

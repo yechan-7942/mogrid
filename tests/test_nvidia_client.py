@@ -3,7 +3,13 @@ from unittest.mock import patch
 
 import requests
 
-from router.nvidia_client import FALLBACK_MODELS, NvidiaAccountError, NvidiaError, call_nvidia
+from router.nvidia_client import (
+    CONNECT_TIMEOUT,
+    FALLBACK_MODELS,
+    NvidiaAccountError,
+    NvidiaError,
+    call_nvidia,
+)
 from tests.helpers import FakeResponse
 
 
@@ -99,6 +105,29 @@ class CallNvidiaFallbackModelsTests(unittest.TestCase):
         with self.assertRaises(NvidiaError):
             call_nvidia("안녕")
         self.assertEqual(mock_post.call_count, len(FALLBACK_MODELS))
+
+    @patch("router.nvidia_client.time.monotonic")
+    @patch("router.nvidia_client.requests.post")
+    def test_stops_when_total_budget_is_exhausted(self, mock_post, mock_clock):
+        # 모델 하나가 timeout을 꽉 채우면 나머지를 계속 돌지 않고 멈춰야 한다.
+        # (없으면 느린 모델이 겹칠 때 한 스텝이 수 분씩 멈춘다.)
+        mock_post.return_value = FakeResponse(429, text="rate limited")
+        # 호출할 때마다 시계가 timeout만큼 진행한 것처럼 흉내낸다.
+        mock_clock.side_effect = [0, 0, 30, 60, 90, 120, 150, 180]
+        with self.assertRaises(NvidiaError) as ctx:
+            call_nvidia("안녕", timeout=30)
+        self.assertLess(mock_post.call_count, len(FALLBACK_MODELS))
+        self.assertIn("예산", str(ctx.exception))
+
+    @patch("router.nvidia_client.requests.post")
+    def test_read_timeout_is_paired_with_connect_timeout(self, mock_post):
+        # requests의 scalar timeout은 소켓 연산 단위라 총 시간을 보장하지 않는다.
+        # (연결, 읽기) 튜플로 넘겨야 연결 단계에서 매달리는 걸 따로 자를 수 있다.
+        mock_post.return_value = FakeResponse(
+            200, {"choices": [{"message": {"content": "답"}}]}
+        )
+        call_nvidia("안녕", model="z-ai/glm-5.3", timeout=30)
+        self.assertEqual(mock_post.call_args.kwargs["timeout"], (CONNECT_TIMEOUT, 30))
 
     @patch("router.nvidia_client.requests.post")
     def test_explicit_model_skips_fallback_list(self, mock_post):
