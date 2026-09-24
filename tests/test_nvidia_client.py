@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 import requests
 
-from router.nvidia_client import NvidiaError, call_nvidia
+from router.nvidia_client import FALLBACK_MODELS, NvidiaAccountError, NvidiaError, call_nvidia
 from tests.helpers import FakeResponse
 
 
@@ -67,6 +67,49 @@ class CallNvidiaTests(unittest.TestCase):
         mock_post.return_value = FakeResponse(200, {"unexpected": "shape"})
         with self.assertRaises(NvidiaError):
             call_nvidia("안녕")
+
+
+@patch.dict("os.environ", {"NVIDIA_API_KEY": "test-key"})
+class CallNvidiaFallbackModelsTests(unittest.TestCase):
+    @patch("router.nvidia_client.requests.post")
+    def test_falls_back_to_next_model_on_rate_limit(self, mock_post):
+        # 첫 번째 모델은 429, 두 번째 모델은 성공 -> 두 번째 모델의 응답을 받아야 한다.
+        mock_post.side_effect = [
+            FakeResponse(429, text="rate limited"),
+            FakeResponse(200, {"choices": [{"message": {"content": "두 번째 모델 응답"}}]}),
+        ]
+        self.assertEqual(call_nvidia("안녕"), "두 번째 모델 응답")
+        self.assertEqual(mock_post.call_count, 2)
+        first_call_model = mock_post.call_args_list[0].kwargs["json"]["model"]
+        second_call_model = mock_post.call_args_list[1].kwargs["json"]["model"]
+        self.assertEqual(first_call_model, FALLBACK_MODELS[0])
+        self.assertEqual(second_call_model, FALLBACK_MODELS[1])
+
+    @patch("router.nvidia_client.requests.post")
+    def test_stops_immediately_on_account_error(self, mock_post):
+        # 401은 모델을 바꿔도 결과가 같으므로, 목록 전체를 소진하지 않고 바로 멈춰야 한다.
+        mock_post.return_value = FakeResponse(401, text="unauthorized")
+        with self.assertRaises(NvidiaAccountError):
+            call_nvidia("안녕")
+        self.assertEqual(mock_post.call_count, 1)
+
+    @patch("router.nvidia_client.requests.post")
+    def test_exhausts_all_models_before_raising(self, mock_post):
+        mock_post.return_value = FakeResponse(429, text="rate limited")
+        with self.assertRaises(NvidiaError):
+            call_nvidia("안녕")
+        self.assertEqual(mock_post.call_count, len(FALLBACK_MODELS))
+
+    @patch("router.nvidia_client.requests.post")
+    def test_explicit_model_skips_fallback_list(self, mock_post):
+        mock_post.return_value = FakeResponse(
+            200, {"choices": [{"message": {"content": "지정 모델 응답"}}]}
+        )
+        self.assertEqual(call_nvidia("안녕", model="openai/gpt-oss-20b"), "지정 모델 응답")
+        self.assertEqual(mock_post.call_count, 1)
+        self.assertEqual(
+            mock_post.call_args.kwargs["json"]["model"], "openai/gpt-oss-20b"
+        )
 
 
 if __name__ == "__main__":

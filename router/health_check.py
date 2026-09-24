@@ -7,6 +7,7 @@ from router.gemini_client import DEFAULT_MODEL as GEMINI_DEFAULT_MODEL
 from router.groq_client import DEFAULT_MODEL as GROQ_DEFAULT_MODEL
 from router.mistral_client import DEFAULT_MODEL as MISTRAL_DEFAULT_MODEL
 from router.nvidia_client import DEFAULT_MODEL as NVIDIA_DEFAULT_MODEL
+from router.nvidia_client import FALLBACK_MODELS as NVIDIA_FALLBACK_MODELS
 from router.ollama_client import DEFAULT_MODEL as OLLAMA_DEFAULT_MODEL
 from router.ollama_client import OLLAMA_BASE_URL
 from router.openrouter_client import DEFAULT_MODEL as OPENROUTER_DEFAULT_MODEL
@@ -59,11 +60,48 @@ def check_mistral() -> CheckResult:
 
 
 def check_nvidia() -> CheckResult:
-    return _check_openai_style_models(
+    # DEFAULT_MODEL 하나만 보는 다른 provider와 달리, NVIDIA는 call_nvidia()가 내부적으로
+    # FALLBACK_MODELS를 순서대로 시도하므로 그 목록 전체의 가용성을 같이 확인한다.
+    # 폴백 모델 일부가 빠져도 DEFAULT_MODEL만 살아있으면 "ok"로 본다 — 그 나머지는
+    # 보너스 자원이라 없어도 기능은 그대로 동작하기 때문.
+    api_key = os.getenv("NVIDIA_API_KEY")
+    if not api_key:
+        return "NVIDIA NIM", "skipped", "NVIDIA_API_KEY가 설정되어 있지 않음"
+
+    try:
+        response = requests.get(
+            "https://integrate.api.nvidia.com/v1/models",
+            headers={"Authorization": f"Bearer {api_key}"},
+            timeout=15,
+        )
+    except requests.exceptions.RequestException as e:
+        return "NVIDIA NIM", "error", f"모델 목록 조회 실패: {e}"
+    if response.status_code != 200:
+        return "NVIDIA NIM", "error", f"모델 목록 조회 실패 ({response.status_code}): {response.text}"
+    try:
+        model_ids = {m["id"] for m in response.json()["data"]}
+    except (KeyError, ValueError, TypeError) as e:
+        return "NVIDIA NIM", "error", f"응답 형식이 예상과 다름: {e}"
+
+    if NVIDIA_DEFAULT_MODEL not in model_ids:
+        return (
+            "NVIDIA NIM",
+            "missing",
+            f"{NVIDIA_DEFAULT_MODEL}이 모델 목록에 없음 (교체가 필요할 수 있음)",
+        )
+
+    missing_fallbacks = [m for m in NVIDIA_FALLBACK_MODELS if m not in model_ids]
+    if missing_fallbacks:
+        return (
+            "NVIDIA NIM",
+            "ok",
+            f"{NVIDIA_DEFAULT_MODEL} 사용 가능 (폴백 모델 중 {len(missing_fallbacks)}개 "
+            f"목록에 없음: {', '.join(missing_fallbacks)})",
+        )
+    return (
         "NVIDIA NIM",
-        "NVIDIA_API_KEY",
-        "https://integrate.api.nvidia.com/v1/models",
-        NVIDIA_DEFAULT_MODEL,
+        "ok",
+        f"{NVIDIA_DEFAULT_MODEL} 외 폴백 모델 {len(NVIDIA_FALLBACK_MODELS) - 1}개 모두 사용 가능",
     )
 
 
