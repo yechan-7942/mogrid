@@ -19,3 +19,11 @@ jobs:
       - run: pip install -r requirements.txt
 
       - run: python -m unittest discover -s tests -t . -v
+
+      # 위 테스트는 requirements.txt만 깔고 소스를 직접 돌리는 방식이라, 실제
+      # 배포 경로(pyproject.toml의 entry point, 패키징 구조)가 깨져도 안 잡힌다.
+      # 낯선 사용자가 겪는 것과 같은 설치 과정을 별도로 검증한다 - API 키가 없는
+      # 환경이므로 네트워크를 타는 명령은 쓰지 않는다.
+      - run: pip install -e .
+      - run: mogrid --help
+      - run: mogrid skills
