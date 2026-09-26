@@ -173,9 +173,34 @@ def one_shot_confirm(auto_approve: bool):
     return _confirm
 
 
+def has_any_provider_key() -> bool:
+    return any(os.getenv(env_var) for env_var, _, _ in PROVIDER_SETUP)
+
+
+_no_key_hint_shown = False
+
+
+def print_no_key_hint_if_needed() -> None:
+    # 키가 하나도 없으면 fallback이 provider 5개를 순서대로 다 찍어보고 나서야
+    # 실패한다 - 그 전에 원인을 바로 알려준다. 프로세스당 한 번만 보여준다
+    # (대화형 모드에서 작업마다 반복 출력되면 소음이 된다).
+    global _no_key_hint_shown
+    if _no_key_hint_shown or has_any_provider_key():
+        return
+    _no_key_hint_shown = True
+    print(
+        yellow(
+            "[안내] 설정된 provider API 키가 없습니다. 'mogrid setup'으로 키를 등록하세요. "
+            "(로컬 Ollama가 실행 중이면 그걸로 시도합니다.)"
+        ),
+        file=sys.stderr,
+    )
+
+
 def run_task(
     task: str, session_history: list[str], confirm: Callable[[str], bool] | None = None
 ) -> str | None:
+    print_no_key_hint_if_needed()
     try:
         result = run_agent(task, session_history=session_history, confirm=confirm)
     except AgentLoopError as e:
@@ -296,6 +321,10 @@ def main() -> None:
             session_history.append(f"작업: {args.task}\n결과: {result}")
             session_history = summarize_session_if_needed(session_history)
             save_session_safely(session_history)
+        else:
+            # run_task가 None을 반환했다는 건 작업이 실패했다는 뜻이다 — 여기서
+            # exit code를 0으로 두면 스크립트/CI에서 성공 여부를 판단할 수 없다.
+            sys.exit(1)
     else:
         run_interactive()
 
