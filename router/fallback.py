@@ -32,17 +32,29 @@ class AllProvidersFailedError(Exception):
 # 전부 시도한다 — 시작점만 바뀔 뿐 폴백 커버리지는 그대로.
 _rotation = 0
 
+# 로테이션은 "무료 자원끼리 부하를 나누는" 장치다. codex는 유일하게 무료 티어가 아니라
+# 사용자의 ChatGPT 할당량을 깎으므로, 시작점으로는 뽑지 않는다 — 안 그러면 앞의 무료
+# provider들이 멀쩡한데도 7번에 한 번은 유료 자원을 먼저 쓰게 된다. 체인에서 빼는 게
+# 아니라 시작점 후보에서만 빼는 것이라, 앞의 provider들이 실패하면 여전히 codex로 넘어간다.
+ROTATION_EXCLUDED = {"codex"}
+
 
 def _reset_rotation() -> None:
     global _rotation
     _rotation = 0
 
 
+def _rotation_start_indices() -> list[int]:
+    indices = [i for i, (name, _, _) in enumerate(PROVIDERS) if name not in ROTATION_EXCLUDED]
+    # 전부 제외되는 구성(테스트 등)에서는 로테이션을 끄지 말고 원래대로 전체를 쓴다.
+    return indices or list(range(len(PROVIDERS)))
+
+
 def call_llm(prompt: str) -> str:
     global _rotation
     failures = []
-    n = len(PROVIDERS)
-    start = _rotation % n
+    candidates = _rotation_start_indices()
+    start = candidates[_rotation % len(candidates)]
     _rotation += 1
     order = PROVIDERS[start:] + PROVIDERS[:start]
 

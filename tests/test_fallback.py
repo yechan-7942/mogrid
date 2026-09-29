@@ -194,5 +194,75 @@ class RotationTests(UsageIsolatedTestCase):
         self.assertEqual(result, "p1-ok")
 
 
+class RotationExclusionTests(UsageIsolatedTestCase):
+    """로테이션은 무료 자원끼리 부하를 나누는 장치라, 유료 자원(codex)은 시작점
+    후보에서 뺀다 — 앞의 무료 provider가 멀쩡한데 먼저 쓰이면 안 된다."""
+
+    def setUp(self):
+        super().setUp()
+        fallback._reset_rotation()
+
+    def tearDown(self):
+        fallback._reset_rotation()
+        super().tearDown()
+
+    def _providers(self, calls):
+        def make_fn(name):
+            def fn(prompt: str) -> str:
+                calls.append(name)
+                return f"{name}-ok"
+
+            return fn
+
+        return [
+            ("free1", make_fn("free1"), FakeProviderError),
+            ("codex", make_fn("codex"), FakeProviderError),
+            ("free2", make_fn("free2"), FakeProviderError),
+        ]
+
+    def test_excluded_provider_is_never_the_starting_point(self):
+        calls = []
+        with patch("router.fallback.PROVIDERS", self._providers(calls)):
+            for _ in range(6):
+                call_llm("안녕")
+        # 매 호출이 첫 provider에서 성공하므로, 기록된 이름이 곧 그 호출의 1순위다
+        self.assertNotIn("codex", calls)
+        self.assertEqual(calls, ["free1", "free2"] * 3)
+
+    def test_excluded_provider_is_still_reached_on_failure(self):
+        calls = []
+        providers = self._providers(calls)
+
+        def fail(prompt: str) -> str:
+            calls.append("free1")
+            raise FakeProviderError("일부러 실패")
+
+        providers[0] = ("free1", fail, FakeProviderError)
+        with patch("router.fallback.PROVIDERS", providers):
+            result = call_llm("안녕")
+        # 시작점에서만 빠질 뿐 체인에서 빠지는 게 아니다
+        self.assertEqual(calls, ["free1", "codex"])
+        self.assertEqual(result, "codex-ok")
+
+    def test_all_providers_excluded_falls_back_to_full_rotation(self):
+        calls = []
+
+        def make_fn(name):
+            def fn(prompt: str) -> str:
+                calls.append(name)
+                return f"{name}-ok"
+
+            return fn
+
+        with patch("router.fallback.ROTATION_EXCLUDED", {"a", "b"}):
+            with patch(
+                "router.fallback.PROVIDERS",
+                [("a", make_fn("a"), FakeProviderError), ("b", make_fn("b"), FakeProviderError)],
+            ):
+                for _ in range(2):
+                    call_llm("안녕")
+        self.assertEqual(calls, ["a", "b"])
+
+
 if __name__ == "__main__":
     unittest.main()
