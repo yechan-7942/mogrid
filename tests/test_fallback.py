@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from router import fallback
 from router.fallback import AllProvidersFailedError, call_llm
+from router.usage import load_usage
 
 
 class FakeProviderError(Exception):
@@ -74,21 +75,27 @@ class CallLlmTests(UsageIsolatedTestCase):
         "router.fallback.PROVIDERS",
         [("fake1", _fail, FakeProviderError), ("fake2", _ok, OtherFakeProviderError)],
     )
-    def test_long_error_message_is_truncated_on_screen_but_not_in_failure_detail(self):
-        long_message = "x" * 5000
-
+    def test_recoverable_provider_failure_prints_nothing(self):
         def _fail_long(prompt: str) -> str:
-            raise FakeProviderError(long_message)
+            raise FakeProviderError("x" * 5000)
 
         with patch("router.fallback.PROVIDERS", [("fake1", _fail_long, FakeProviderError), ("fake2", _ok, OtherFakeProviderError)]):
             buf = io.StringIO()
             with redirect_stdout(buf):
                 call_llm("안녕")
-        printed = buf.getvalue()
-        # 화면에는 잘려서 나가야 한다 (reasoning 모델의 raw 응답 덤프로 터미널이
-        # 도배되는 걸 막기 위한 변경)
-        self.assertNotIn(long_message, printed)
-        self.assertIn("생략", printed)
+        # 폴백으로 복구되는 실패는 정상 동작의 일부라 화면에 아무것도 남기지 않는다
+        self.assertEqual(buf.getvalue(), "")
+
+    @patch(
+        "router.fallback.PROVIDERS",
+        [("fake1", _fail, FakeProviderError), ("fake2", _ok, OtherFakeProviderError)],
+    )
+    def test_silent_failure_is_still_recorded_in_usage(self):
+        with redirect_stdout(io.StringIO()):
+            call_llm("안녕")
+        record = load_usage()["fake1"]
+        self.assertEqual(record["total_fail"], 1)
+        self.assertEqual(record["last_error"], "일부러 실패")
 
     @patch(
         "router.fallback.PROVIDERS",

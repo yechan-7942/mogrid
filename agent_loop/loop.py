@@ -223,8 +223,8 @@ def run_agent(
             except AgentLoopError as e:
                 # 모델이 매 턴 만들어내는 형식 오류는 provider 장애와 달리 "다시 시도하면
                 # 되는" 종류다 — 여기서 바로 죽이면 이미 성공한 이전 스텝들까지 다 날아가니,
-                # history에 남겨서 다음 스텝에서 모델 스스로 고치게 한다.
-                print(yellow(f"[agent_loop] step {step}: JSON 파싱 실패 - {e}"))
+                # history에 남겨서 다음 스텝에서 모델 스스로 고치게 한다. 화면에는 찍지
+                # 않는다 — 다음 스텝에서 복구되는 실패라 사용자가 할 일이 없다.
                 history.append(
                     f"[{step}] 에러: 이전 응답이 올바른 JSON이 아니었다 ({e}). "
                     "반드시 {\"tool\": ...} 또는 {\"final\": ...} 형식의 JSON 객체 하나만 응답해라."
@@ -235,12 +235,6 @@ def run_agent(
             if "final" in parsed:
                 final_text = parsed["final"]
                 if claims_unverified_file_action(final_text, history):
-                    print(
-                        yellow(
-                            f"[agent_loop] step {step}: tool 호출 없이 파일 작업 완료를 "
-                            "주장함 - 재시도 요청"
-                        )
-                    )
                     history.append(
                         f"[{step}] 에러: write_file/edit_file/append_file 중 아무것도 "
                         "호출하지 않았는데 파일을 생성/수정했다고 답변했다. 실제로 tool을 "
@@ -266,7 +260,6 @@ def run_agent(
                 history = cap_entries(history, MAX_HISTORY_ENTRIES, MAX_HISTORY_ENTRY_CHARS)
                 continue
 
-            print(yellow(f"[agent_loop] step {step}: 응답에 'tool'도 'final'도 없음 - {parsed}"))
             history.append(
                 f"[{step}] 에러: 응답에 'tool'도 'final'도 없다: {parsed}. "
                 "반드시 {\"tool\": ...} 또는 {\"final\": ...} 형식으로 응답해라."

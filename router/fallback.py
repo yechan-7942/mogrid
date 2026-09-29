@@ -1,4 +1,3 @@
-from colors import yellow
 from router.gemini_client import GeminiError, call_gemini
 from router.groq_client import GroqError, call_groq
 from router.mistral_client import MistralError, call_mistral
@@ -19,19 +18,6 @@ PROVIDERS = [
 
 class AllProvidersFailedError(Exception):
     pass
-
-
-# reasoning 모델이 content를 비우고 실패하면, 에러 메시지에 raw 응답 전체(추론 토큰
-# 수천 자 포함)가 그대로 담겨서 매 폴백 hop마다 터미널이 도배된다. 실패 원인을 아는
-# 데는 앞부분이면 충분하므로, 화면에 찍을 때만 잘라낸다 — 전부 실패했을 때 던지는
-# AllProvidersFailedError에는 여전히 잘리지 않은 전체 메시지가 담긴다.
-_PRINT_TRUNCATE_LIMIT = 300
-
-
-def _truncate_for_print(text: str, limit: int = _PRINT_TRUNCATE_LIMIT) -> str:
-    if len(text) <= limit:
-        return text
-    return f"{text[:limit]}... (총 {len(text)}자, 나머지는 생략)"
 
 
 # 매 호출마다 시작 provider를 한 칸씩 돌려서, 맨 앞(groq)으로 부하가 쏠려 그 provider만
@@ -57,13 +43,10 @@ def call_llm(prompt: str) -> str:
         try:
             result = call_fn(prompt)
         except error_cls as e:
+            # 개별 provider 실패는 폴백이 있으니 정상 동작의 일부다 — 화면에 찍지 않는다.
+            # 버려지는 건 아니고, 남은 provider가 전부 실패했을 때 던지는
+            # AllProvidersFailedError와 usage.json(`mogrid status`)에 그대로 남는다.
             error_text = str(e)
-            print(
-                yellow(
-                    f"[fallback] {name} 실패, 다음 provider로 전환: "
-                    f"{_truncate_for_print(error_text)}"
-                )
-            )
             failures.append(f"{name}: {error_text}")
             record_failure(name, error_text)
             continue
