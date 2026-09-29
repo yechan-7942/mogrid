@@ -16,19 +16,16 @@ TOOL_SCHEMAS = [
     {
         "name": "list_files",
         "description": (
-            "디렉터리 안의 파일/폴더 목록을 반환한다. 경로를 모를 때 먼저 사용한다. "
-            "모든 파일 tool(list_files/search_files/read_file/write_file/edit_file/append_file/make_dir)은 "
-            "프로젝트 폴더 밖의 경로에는 접근할 수 없다."
+            "디렉터리 안의 파일/폴더 목록을 반환한다. "
+            "모든 파일 tool은 프로젝트 폴더 밖의 경로에 접근할 수 없다."
         ),
         "args": {"path": "확인할 디렉터리 경로 (기본값 '.')"},
     },
     {
         "name": "search_files",
         "description": (
-            "지정한 경로 하위를 재귀적으로 뒤져서 파일 이름이나 내용에 keyword가 포함된 "
-            "파일을 찾는다. 여러 폴더에 걸쳐 파일을 찾아야 할 때 사용한다. 한 파일 안에서도 "
-            "일치하는 줄을 전부(최대 5줄) 보여준다. 기본은 대소문자 무시 부분 문자열 검색이고, "
-            "regex=true를 주면 keyword를 정규식으로 해석해 검색한다."
+            "경로 하위를 재귀적으로 뒤져 파일 이름이나 내용에 keyword가 포함된 파일을 찾는다. "
+            "한 파일에서 일치하는 줄을 최대 5줄까지 보여준다."
         ),
         "args": {
             "keyword": "찾을 파일 이름/내용 키워드 (regex=true면 정규식)",
@@ -38,11 +35,7 @@ TOOL_SCHEMAS = [
     },
     {
         "name": "read_file",
-        "description": (
-            "파일 내용을 읽어서 문자열로 반환한다. offset/limit을 지정하지 않으면 파일 "
-            "전체를 반환한다. 파일이 커서 전체를 다 읽을 필요가 없을 때는 offset/limit으로 "
-            "필요한 줄 범위만 읽어라."
-        ),
+        "description": "파일 내용을 문자열로 반환한다. offset/limit이 없으면 전체를 반환한다.",
         "args": {
             "path": "읽을 파일 경로",
             "offset": "읽기 시작할 줄 번호, 1부터 시작 (기본값 1)",
@@ -57,11 +50,9 @@ TOOL_SCHEMAS = [
     {
         "name": "edit_file",
         "description": (
-            "파일 안의 old_string을 new_string으로 바꾼다. write_file과 달리 파일 전체를 "
-            "다시 쓰지 않고 해당 부분만 바꾸므로, 이미 존재하는 파일을 부분 수정할 때는 "
-            "write_file 대신 이걸 사용해라. old_string은 파일 안에서 정확히 일치해야 하고, "
-            "정확히 1번만 등장해야 한다 (여러 번 등장하면 에러 — old_string에 앞뒤 줄을 "
-            "더 포함시켜 위치를 특정하거나, 전부 바꾸려면 replace_all을 true로 줘라)."
+            "파일 안의 old_string을 new_string으로 바꾼다. old_string은 정확히 일치해야 하고 "
+            "정확히 1번만 등장해야 한다 — 여러 번 등장하면 에러이므로 앞뒤 줄을 더 포함해 "
+            "위치를 특정하거나, 전부 바꾸려면 replace_all=true를 줘라."
         ),
         "args": {
             "path": "수정할 파일 경로",
@@ -83,12 +74,8 @@ TOOL_SCHEMAS = [
     {
         "name": "update_task_list",
         "description": (
-            "여러 단계가 필요한 작업을 진행할 때, 지금까지 파악한 전체 하위 작업 목록과 "
-            "각각의 진행 상태를 기록한다. 호출할 때마다 현재 전체 목록을 통째로 다시 "
-            "제출해라 (일부만 추가/수정하는 게 아니라 매번 전체 목록). 세 단계 이상 걸리는 "
-            "작업을 시작할 때 목록을 한 번 만들고, 각 하위 작업을 끝낼 때마다 그 항목의 "
-            "status를 completed로 바꿔서 다시 호출해라. 한두 스텝으로 끝나는 간단한 작업에는 "
-            "쓰지 마라."
+            "하위 작업 목록과 각각의 진행 상태를 기록한다. 호출할 때마다 현재 전체 목록을 "
+            "통째로 다시 제출해라 (일부만 추가/수정하는 게 아니다)."
         ),
         "args": {
             "tasks": (
@@ -101,21 +88,16 @@ TOOL_SCHEMAS = [
         "name": "load_skill",
         "description": (
             "'사용 가능한 스킬' 목록에 있는 스킬의 전체 내용을 불러온다. 스킬은 이 프로젝트에서 "
-            "특정 종류의 작업을 할 때 따라야 할 절차가 적힌 문서다. 목록의 설명을 보고 지금 "
-            "작업과 관련된 스킬이 있으면, 작업을 시작하기 전에 먼저 이걸로 내용을 읽어라. "
-            "목록에 없는 이름은 부를 수 없다."
+            "그 작업을 할 때 따라야 할 절차가 적힌 문서다. 목록에 없는 이름은 부를 수 없다."
         ),
         "args": {"name": "불러올 스킬 이름 (목록에 적힌 그대로)"},
     },
     {
         "name": "run_command",
         "description": (
-            "허용된 명령어(npm, npx, node, yarn, pip, pip3, python, python3, pytest, uv, git, "
-            "curl, docker, docker-compose)만 실행하고, 끝날 때까지 기다렸다가 결과를 반환한다. "
-            "패키지 설치, 빌드, 테스트 실행, git 조작, curl로 응답 확인, docker build/push, "
-            "uv sync/add/run 등 '끝나는' 명령에 사용한다. 서버처럼 계속 떠 있어야 "
-            "하는 명령에 쓰면 타임아웃으로 항상 실패하니 start_process를 대신 사용해라. "
-            "프로젝트 폴더 밖에서는 실행할 수 없고, 허용 목록에 없는 명령어는 실패로 반환된다."
+            "명령을 끝날 때까지 기다렸다가 결과를 반환한다. 허용 명령어(npm, npx, node, yarn, "
+            "pip, pip3, python, python3, pytest, uv, git, curl, docker, docker-compose)만 "
+            "실행되고, 프로젝트 폴더 밖에서는 실행할 수 없다."
         ),
         "args": {
             "command": "실행할 명령어 전체 (예: 'npm install express')",
@@ -125,10 +107,8 @@ TOOL_SCHEMAS = [
     {
         "name": "start_process",
         "description": (
-            "명령을 백그라운드로 실행하고 즉시 process_id를 반환한다 (기다리지 않음). "
-            "서버, watch 모드처럼 계속 떠 있어야 하는 명령에 사용한다. 허용 명령어/프로젝트 "
-            "폴더 제한은 run_command와 동일하다. 실행 직후 바로 죽으면(포트 충돌, 문법 오류 "
-            "등) 그 사실과 출력을 바로 반환한다."
+            "명령을 백그라운드로 실행하고 기다리지 않고 즉시 process_id를 반환한다. 제한은 "
+            "run_command와 같다. 실행 직후 죽으면(포트 충돌, 문법 오류 등) 그 사실과 출력을 반환한다."
         ),
         "args": {
             "command": "백그라운드로 실행할 명령어 (예: 'npm start')",
@@ -142,7 +122,7 @@ TOOL_SCHEMAS = [
     },
     {
         "name": "stop_process",
-        "description": "start_process로 띄운 프로세스를 종료한다. 확인이 끝난 백그라운드 프로세스는 반드시 이걸로 정리해라.",
+        "description": "start_process로 띄운 프로세스를 종료한다.",
         "args": {"process_id": "start_process가 반환한 process_id"},
     },
 ]
