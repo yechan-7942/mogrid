@@ -8,7 +8,14 @@ from typing import Callable
 from dotenv import find_dotenv, load_dotenv, set_key
 
 from agent_loop.loop import AgentLoopError, run_agent
-from agent_loop.session import MAX_SESSION_ENTRIES, SessionError, load_session, save_session, trim_session
+from agent_loop.session import (
+    MAX_SESSION_ENTRIES,
+    SessionError,
+    load_session,
+    save_session,
+    session_prompt_entries,
+    trim_session,
+)
 from agent_loop.summarizer import SUMMARY_PREFIX, summarize_entries
 from banner import render_welcome_banner
 from colors import bold, cyan, dim, green, red, yellow
@@ -203,7 +210,13 @@ def run_task(
 ) -> str | None:
     print_no_key_hint_if_needed()
     try:
-        result = run_agent(task, session_history=session_history, confirm=confirm)
+        # 프롬프트에 실을 때만 더 강하게 줄인 사본을 넘긴다 — 호출자가 들고 있는
+        # session_history 원본은 그대로 둬야 요약/저장이 온전한 기록을 쓴다.
+        result = run_agent(
+            task,
+            session_history=session_prompt_entries(session_history),
+            confirm=confirm,
+        )
     except AgentLoopError as e:
         print(red(f"[에러] 작업을 완료하지 못했습니다: {e}"), file=sys.stderr)
         return None

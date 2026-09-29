@@ -3,7 +3,12 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from agent_loop.session import MAX_SESSION_ENTRIES
+from agent_loop.session import (
+    MAX_ENTRY_CHARS,
+    MAX_SESSION_ENTRIES,
+    PROMPT_MAX_ENTRY_CHARS,
+    PROMPT_RECENT_ENTRIES,
+)
 from agent_loop.summarizer import SUMMARY_PREFIX
 from main import (
     PROVIDER_SETUP,
@@ -12,6 +17,7 @@ from main import (
     run_check_models,
     run_setup,
     run_status,
+    run_task,
     summarize_session_if_needed,
 )
 from router.fallback import AllProvidersFailedError
@@ -182,6 +188,30 @@ class OneShotConfirmTests(unittest.TestCase):
     def test_auto_approve_false_always_blocks(self):
         confirm = one_shot_confirm(False)
         self.assertFalse(confirm("위험한 작업"))
+
+
+class RunTaskSessionCapTests(unittest.TestCase):
+    @patch("main.print_no_key_hint_if_needed")
+    @patch("main.run_agent", return_value="완료")
+    def _run(self, session_history, mock_run_agent, mock_hint):
+        import io
+        from contextlib import redirect_stdout
+
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            run_task("작업", session_history)
+        return mock_run_agent.call_args.kwargs["session_history"]
+
+    def test_passes_prompt_capped_copy_to_agent(self):
+        entries = ["x" * MAX_ENTRY_CHARS for _ in range(MAX_SESSION_ENTRIES)]
+        passed = self._run(entries)
+        for entry in passed[:-PROMPT_RECENT_ENTRIES]:
+            self.assertLess(len(entry), PROMPT_MAX_ENTRY_CHARS)
+
+    def test_caller_session_history_is_left_intact(self):
+        entries = ["x" * MAX_ENTRY_CHARS for _ in range(MAX_SESSION_ENTRIES)]
+        self._run(entries)
+        self.assertTrue(all(len(entry) == MAX_ENTRY_CHARS for entry in entries))
 
 
 class SummarizeSessionIfNeededTests(unittest.TestCase):

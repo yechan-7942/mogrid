@@ -8,10 +8,14 @@ import agent_loop.session as session_module
 from agent_loop.session import (
     MAX_ENTRY_CHARS,
     MAX_SESSION_ENTRIES,
+    PROMPT_MAX_ENTRY_CHARS,
+    PROMPT_OLDER_ENTRY_CHARS,
+    PROMPT_RECENT_ENTRIES,
     SessionError,
     load_session,
     save_session,
     session_file_path,
+    session_prompt_entries,
     trim_session,
 )
 from tools.sandbox import PROJECT_ROOT_ENV
@@ -92,6 +96,40 @@ class TrimSessionTests(unittest.TestCase):
     def test_leaves_short_entry_untouched(self):
         entry = "짧은 항목"
         self.assertEqual(trim_session([entry]), [entry])
+
+
+class SessionPromptEntriesTests(unittest.TestCase):
+    def test_prompt_cap_is_tighter_than_disk_cap(self):
+        self.assertLess(PROMPT_MAX_ENTRY_CHARS, MAX_ENTRY_CHARS)
+        self.assertLess(PROMPT_OLDER_ENTRY_CHARS, PROMPT_MAX_ENTRY_CHARS)
+
+    def test_short_entries_unchanged(self):
+        entries = ["a", "b", "c"]
+        self.assertEqual(session_prompt_entries(entries), entries)
+
+    def test_recent_entries_keep_larger_cap(self):
+        entries = ["x" * 5000 for _ in range(MAX_SESSION_ENTRIES)]
+        capped = session_prompt_entries(entries)
+        for entry in capped[-PROMPT_RECENT_ENTRIES:]:
+            self.assertTrue(entry.startswith("x" * PROMPT_MAX_ENTRY_CHARS))
+
+    def test_older_entries_get_smaller_cap(self):
+        entries = ["x" * 5000 for _ in range(MAX_SESSION_ENTRIES)]
+        capped = session_prompt_entries(entries)
+        for entry in capped[:-PROMPT_RECENT_ENTRIES]:
+            self.assertLessEqual(len(entry), PROMPT_OLDER_ENTRY_CHARS + len(" …(생략됨)"))
+            self.assertTrue(entry.startswith("x" * PROMPT_OLDER_ENTRY_CHARS))
+
+    def test_does_not_mutate_input(self):
+        entries = ["x" * 5000 for _ in range(MAX_SESSION_ENTRIES)]
+        session_prompt_entries(entries)
+        self.assertTrue(all(len(entry) == 5000 for entry in entries))
+
+    def test_prompt_block_is_much_smaller_than_disk_block(self):
+        entries = ["x" * MAX_ENTRY_CHARS for _ in range(MAX_SESSION_ENTRIES)]
+        disk_block = "\n\n".join(trim_session(entries))
+        prompt_block = "\n\n".join(session_prompt_entries(entries))
+        self.assertLess(len(prompt_block), len(disk_block) // 2)
 
 
 class LoadSessionSelfHealsOversizedFileTests(SessionTestCase):
