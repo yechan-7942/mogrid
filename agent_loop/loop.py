@@ -25,6 +25,14 @@ MAX_STEPS = 25
 MAX_HISTORY_ENTRIES = 15
 MAX_HISTORY_ENTRY_CHARS = 3000
 
+# 캡만으로는 부족하다 — 상한에 걸리지 않아도 15개 × 3000자가 매 스텝 통째로 재전송되면
+# 그 자체가 큰 비용이다(무료 티어의 분당 토큰 제한에 먼저 걸린다). 그렇다고 상한을
+# 일률적으로 낮추면 모델이 방금 읽은 파일 내용을 잃어서 같은 파일을 다시 읽는 헛스텝이
+# 늘어난다. 그래서 최근 RECENT_HISTORY_ENTRIES개만 원래 상한을 유지하고, 그보다 오래된
+# 항목은 "무슨 일이 있었는지"만 남기면 충분하므로 훨씬 낮은 상한으로 줄인다.
+RECENT_HISTORY_ENTRIES = 3
+OLDER_HISTORY_ENTRY_CHARS = 600
+
 # 약한 모델이 tool을 한 번도 호출하지 않고 "파일을 만들었다/고쳤다"고 말로만 끝내는
 # 경우가 실사용 중 재현됨 (README 알려진 한계) — 프롬프트 규칙만으로는 안 지켜지므로,
 # 최종 답변이 파일 작업 완료를 주장하는데 history에 write_file/edit_file/append_file
@@ -61,6 +69,16 @@ def add_not_found_hint(tool_name: str, result: str) -> str:
     if tool_name in _PATH_LOOKUP_TOOLS and _NOT_FOUND_MARKER in result:
         return result + _NOT_FOUND_HINT
     return result
+
+
+def _cap_history(history: list[str]) -> list[str]:
+    return cap_entries(
+        history,
+        MAX_HISTORY_ENTRIES,
+        MAX_HISTORY_ENTRY_CHARS,
+        OLDER_HISTORY_ENTRY_CHARS,
+        RECENT_HISTORY_ENTRIES,
+    )
 
 
 class AgentLoopError(Exception):
@@ -229,7 +247,7 @@ def run_agent(
                     f"[{step}] 에러: 이전 응답이 올바른 JSON이 아니었다 ({e}). "
                     "반드시 {\"tool\": ...} 또는 {\"final\": ...} 형식의 JSON 객체 하나만 응답해라."
                 )
-                history = cap_entries(history, MAX_HISTORY_ENTRIES, MAX_HISTORY_ENTRY_CHARS)
+                history = _cap_history(history)
                 continue
 
             if "final" in parsed:
@@ -240,7 +258,7 @@ def run_agent(
                         "호출하지 않았는데 파일을 생성/수정했다고 답변했다. 실제로 tool을 "
                         "호출해서 파일을 만든 뒤에만 완료를 보고해라."
                     )
-                    history = cap_entries(history, MAX_HISTORY_ENTRIES, MAX_HISTORY_ENTRY_CHARS)
+                    history = _cap_history(history)
                     continue
                 return final_text
 
@@ -257,14 +275,14 @@ def run_agent(
                     result = f"에러: {e}"
                 result = add_not_found_hint(tool_name, result)
                 history.append(f"[{step}] tool={tool_name} args={tool_args} -> {result}")
-                history = cap_entries(history, MAX_HISTORY_ENTRIES, MAX_HISTORY_ENTRY_CHARS)
+                history = _cap_history(history)
                 continue
 
             history.append(
                 f"[{step}] 에러: 응답에 'tool'도 'final'도 없다: {parsed}. "
                 "반드시 {\"tool\": ...} 또는 {\"final\": ...} 형식으로 응답해라."
             )
-            history = cap_entries(history, MAX_HISTORY_ENTRIES, MAX_HISTORY_ENTRY_CHARS)
+            history = _cap_history(history)
 
         raise AgentLoopError(f"{max_steps}스텝 안에 최종 답변을 받지 못했습니다.")
     finally:
