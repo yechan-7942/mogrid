@@ -1,10 +1,11 @@
 import json
 import os
 import re
+import sys
 from typing import Callable
 
 from agent_loop.text_utils import cap_entries
-from colors import cyan, dim, yellow
+from colors import dim, yellow
 from router.fallback import AllProvidersFailedError, call_llm
 from tools.exec_tools import kill_all_processes
 from tools.registry import TOOL_SCHEMAS, ToolError, call_tool
@@ -69,6 +70,22 @@ def add_not_found_hint(tool_name: str, result: str) -> str:
     if tool_name in _PATH_LOOKUP_TOOLS and _NOT_FOUND_MARKER in result:
         return result + _NOT_FOUND_HINT
     return result
+
+
+# 어떤 tool을 어떤 인자로 부르는지까지 매 스텝 찍으면, 사용자가 읽을 일 없는 내부 로그로
+# 화면이 가득 차서 정작 최종 결과가 묻힌다. 진행 중이라는 사실만 점 하나로 알린다.
+# TTY가 아니면(파이프/리다이렉트) 진행 표시는 결과물을 오염시키므로 아예 내보내지 않는다.
+_PROGRESS_LABEL = "답변 생성중"
+
+
+def _progress(text: str) -> None:
+    if sys.stdout.isatty():
+        print(dim(text), end="", flush=True)
+
+
+def _progress_end() -> None:
+    if sys.stdout.isatty():
+        print(flush=True)
 
 
 def _cap_history(history: list[str]) -> list[str]:
@@ -217,7 +234,9 @@ def run_agent(
     reset_tasks()
 
     try:
+        _progress(_PROGRESS_LABEL)
         for step in range(1, max_steps + 1):
+            _progress(".")
             history_text = "\n".join(history) if history else "(없음)"
             prompt = (
                 f"{system_prompt}\n"
@@ -265,7 +284,6 @@ def run_agent(
             if "tool" in parsed:
                 tool_name = parsed["tool"]
                 tool_args = parsed.get("args", {})
-                print(dim(f"[agent_loop] step {step}: ") + cyan(f"{tool_name}({tool_args})") + dim(" 호출"))
                 try:
                     reason = requires_confirmation(tool_name, tool_args)
                     if reason and confirm is not None and not confirm(reason):
@@ -286,6 +304,9 @@ def run_agent(
 
         raise AgentLoopError(f"{max_steps}스텝 안에 최종 답변을 받지 못했습니다.")
     finally:
+        # 진행 표시가 줄바꿈 없이 이어지므로, 어떻게 끝나든(성공/에러/스텝초과) 여기서
+        # 줄을 닫아야 최종 결과나 에러가 점 뒤에 붙지 않는다.
+        _progress_end()
         # 모델이 start_process로 띄운 서버를 stop_process로 못 끄고 작업이 끝나도
         # (성공/에러/스텝초과 무관) 프로세스가 고아로 남지 않게 항상 정리한다.
         kill_all_processes()
