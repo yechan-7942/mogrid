@@ -1,8 +1,8 @@
 # Mogrid
 
 
-무료 LLM API(Groq, Gemini, OpenRouter, Mistral, NVIDIA NIM) + 로컬 LLM(Ollama)을 여러 개
-묶은 CLI 에이전트. 터미널에서 할 일을 말로 던지면 Claude Code처럼 실제 파일을 직접
+무료 LLM API(Groq, Gemini, OpenRouter, Mistral, NVIDIA NIM) + 로컬 LLM(Ollama) + 로컬
+codex CLI를 여러 개 묶은 CLI 에이전트. 터미널에서 할 일을 말로 던지면 Claude Code처럼 실제 파일을 직접
 읽고 수정하면서 작업을 이어간다. provider 하나가 막히면 알아서 다음 걸로 넘어가는
 폴백 라우터가 이 프로젝트의 핵심이다.
 
@@ -21,9 +21,11 @@
    (`search_files`) 등 파일 시스템을 직접 건드리는 tool들이라 "말로만 설명"하지 않고
    진짜로 파일이 바뀐다. 실행 결과는 다시 모델에 넘겨서 다음 스텝으로 이어간다.
 3. provider 하나가 실패(타임아웃, 빈 응답, 서버 에러 등)하면 라우터가 자동으로
-   다음 provider로 전환한다: `groq → gemini → openrouter → mistral → nvidia → ollama`
+   다음 provider로 전환한다:
+   `groq → gemini → openrouter → mistral → codex → nvidia → ollama`
    NVIDIA는 여기서 한 겹 더 들어가서, provider를 포기하기 전에 같은 키로 쓸 수 있는
-   무료 모델 여러 개를 순서대로 먼저 시도한다.
+   무료 모델 여러 개를 순서대로 먼저 시도한다. 폴백으로 복구되는 실패는 화면에
+   찍지 않고 조용히 넘어간다 — 기록은 `mogrid status`에 남는다.
 4. `run_command`나 기존 파일 덮어쓰기처럼 되돌리기 어려운 행동은 실행 전에 확인을
    받는다.
 5. 세션 기록은 프로젝트 디렉토리별로 나눠서 저장하고, 너무 길어지면 통째로 자르는
@@ -209,3 +211,11 @@ python3 -m unittest discover -s tests -t .
 - Ollama는 로컬 서버(기본 `http://localhost:11434`, `OLLAMA_BASE_URL`로 변경
   가능)라 API 키가 없고, 콜드 스타트 시 응답까지 2~3분 걸릴 수 있어 timeout을
   다른 provider보다 훨씬 크게 잡아뒀다.
+- codex는 HTTP API가 아니라 로컬에 설치된 `codex` CLI를 서브프로세스로 부른다.
+  인증은 `codex login`으로 이미 해둔 ChatGPT 로그인을 그대로 쓰므로 API 키가
+  필요 없다. 설치나 로그인이 안 돼 있으면 그냥 건너뛴다. 다른 provider와 달리
+  무료 티어가 아니라 ChatGPT의 에이전트 할당량(Codex와 ChatGPT Work가 공유하는
+  풀. 일반 채팅 몫과는 별개)을 소모하므로 무료 API들보다는 뒤, 대신 실패가 잦은
+  nvidia와 콜드 스타트가 느린 ollama보다는 앞인 체인 중간에 두었다. mogrid에는
+  자체 tool 루프가 있으므로 codex는 파일을 건드릴 수 없는 read-only 샌드박스에서
+  순수 텍스트 생성기로만 쓴다.

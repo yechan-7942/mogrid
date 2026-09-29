@@ -1,9 +1,11 @@
+import subprocess
 import unittest
 from unittest.mock import patch
 
 import requests
 
 from router.health_check import (
+    check_codex,
     check_gemini,
     check_groq,
     check_mistral,
@@ -148,15 +150,38 @@ class CheckOllamaTests(unittest.TestCase):
         self.assertEqual(check_ollama()[1], "skipped")
 
 
+class CheckCodexTests(unittest.TestCase):
+    @patch("router.health_check.subprocess.run")
+    def test_logged_in_is_ok(self, mock_run):
+        mock_run.return_value = subprocess.CompletedProcess([], 0, stdout="Logged in using ChatGPT")
+        name, status, detail = check_codex()
+        self.assertEqual((name, status), ("Codex CLI", "ok"))
+        self.assertIn("Logged in", detail)
+
+    @patch("router.health_check.subprocess.run")
+    def test_cli_not_installed_is_skipped_not_error(self, mock_run):
+        # codex를 안 쓰는 사람에게는 "고장"이 아니라 그냥 미사용 상태다.
+        mock_run.side_effect = FileNotFoundError()
+        self.assertEqual(check_codex()[1], "skipped")
+
+    @patch("router.health_check.subprocess.run")
+    def test_not_logged_in_is_missing(self, mock_run):
+        mock_run.return_value = subprocess.CompletedProcess([], 1, stdout="", stderr="not logged in")
+        self.assertEqual(check_codex()[1], "missing")
+
+
 class RunAllChecksTests(unittest.TestCase):
     @patch.dict("os.environ", {}, clear=True)
+    @patch("router.health_check.subprocess.run")
     @patch("router.health_check.requests.get")
-    def test_returns_one_result_per_provider(self, mock_get):
+    def test_returns_one_result_per_provider(self, mock_get, mock_run):
         mock_get.side_effect = requests.exceptions.ConnectionError()
+        mock_run.side_effect = FileNotFoundError()
         results = run_all_checks()
         providers = [r[0] for r in results]
         self.assertEqual(
-            providers, ["Groq", "Gemini", "OpenRouter", "Mistral", "NVIDIA NIM", "Ollama"]
+            providers,
+            ["Groq", "Gemini", "OpenRouter", "Mistral", "NVIDIA NIM", "Ollama", "Codex CLI"],
         )
 
 

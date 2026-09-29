@@ -1,3 +1,4 @@
+from router.codex_client import CodexError, call_codex
 from router.gemini_client import GeminiError, call_gemini
 from router.groq_client import GroqError, call_groq
 from router.mistral_client import MistralError, call_mistral
@@ -11,6 +12,12 @@ PROVIDERS = [
     ("gemini", call_gemini, GeminiError),
     ("openrouter", call_openrouter, OpenRouterError),
     ("mistral", call_mistral, MistralError),
+    # codex는 체인 중간에 둔다. 앞의 넷(무료 API)보다는 아껴 써야 하지만 — 유일하게
+    # 무료 티어가 아니라 ChatGPT의 에이전트 할당량을 깎는다 — 뒤의 둘보다는 먼저
+    # 닿는 게 낫다: nvidia는 목록에 있는 모델이 404를 내는 일이 잦고, ollama는 콜드
+    # 스타트에 2~3분이 걸린다. 설치/로그인이 안 돼 있으면 CodexError로 즉시 빠지므로,
+    # 안 쓰는 사람에게는 없는 것과 같다.
+    ("codex", call_codex, CodexError),
     ("nvidia", call_nvidia, NvidiaError),
     ("ollama", call_ollama, OllamaError),
 ]

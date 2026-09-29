@@ -90,6 +90,7 @@ _PROVIDER_DISPLAY_NAMES = {
     "mistral": "Mistral",
     "nvidia": "NVIDIA NIM",
     "ollama": "Ollama",
+    "codex": "Codex CLI",
 }
 
 
@@ -191,7 +192,7 @@ def print_no_key_hint_if_needed() -> None:
     print(
         yellow(
             "[안내] 설정된 provider API 키가 없습니다. 'mogrid setup'으로 키를 등록하세요. "
-            "(로컬 Ollama가 실행 중이면 그걸로 시도합니다.)"
+            "(키가 필요 없는 로컬 Ollama나 codex CLI가 준비돼 있으면 그걸로 시도합니다.)"
         ),
         file=sys.stderr,
     )

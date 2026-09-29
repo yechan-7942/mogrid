@@ -1,8 +1,10 @@
 import os
+import subprocess
 
 import requests
 from dotenv import load_dotenv
 
+from router.codex_client import CODEX_BIN
 from router.gemini_client import DEFAULT_MODEL as GEMINI_DEFAULT_MODEL
 from router.groq_client import DEFAULT_MODEL as GROQ_DEFAULT_MODEL
 from router.mistral_client import DEFAULT_MODEL as MISTRAL_DEFAULT_MODEL
@@ -174,7 +176,35 @@ def check_ollama() -> CheckResult:
     )
 
 
-ALL_CHECKS = (check_groq, check_gemini, check_openrouter, check_mistral, check_nvidia, check_ollama)
+def check_codex() -> CheckResult:
+    # codex는 /models 목록을 조회할 HTTP 엔드포인트가 없다. 대신 CLI가 설치돼 있고
+    # 로그인이 살아있는지를 본다 — 실제로 막히는 지점이 그 둘이기 때문이다.
+    try:
+        result = subprocess.run(
+            [CODEX_BIN, "login", "status"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except FileNotFoundError:
+        return "Codex CLI", "skipped", f"codex CLI('{CODEX_BIN}')가 설치되어 있지 않음"
+    except (subprocess.TimeoutExpired, OSError) as e:
+        return "Codex CLI", "error", f"codex 실행 실패: {e}"
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").strip()
+        return "Codex CLI", "missing", f"로그인되어 있지 않음 (`codex login` 필요): {detail}"
+    return "Codex CLI", "ok", (result.stdout or "").strip() or "로그인됨"
+
+
+ALL_CHECKS = (
+    check_groq,
+    check_gemini,
+    check_openrouter,
+    check_mistral,
+    check_nvidia,
+    check_ollama,
+    check_codex,
+)
 
 
 def run_all_checks() -> list[CheckResult]:
