@@ -23,7 +23,10 @@ CONFIRM_REQUIRED_TOOLS = {"run_command"}
 # 어려워서 여기에 포함하지 않는다(그쪽은 MOGRID_AUTO_APPROVE/--yes가 담당).
 AUTO_APPROVE_COMMANDS_ENV = "MOGRID_AUTO_APPROVE_COMMANDS"
 
-MAX_STEPS = 25
+MAX_STEPS = 50
+# 스텝 수를 늘려도 아래 history 캡 덕분에 프롬프트 크기는 그대로고, 늘어나는 건 호출
+# 횟수(무료 티어 rate limit 소모)뿐이라 사용자가 .env에서 직접 조정할 수 있게 둔다.
+MAX_STEPS_ENV = "MOGRID_MAX_STEPS"
 # run_command 등 tool 결과가 길어질 수 있어, session_history와 같은 이유로
 # 이번 작업 안의 history도 개수/길이를 캡 씌운다 (그렇지 않으면 스텝이 늘어날수록
 # 매 프롬프트에 재삽입되는 history가 무한정 커져 컨텍스트/rate limit을 넘길 수 있다).
@@ -211,12 +214,31 @@ def requires_confirmation(tool_name: str, tool_args: dict) -> str | None:
     return None
 
 
+def resolve_max_steps() -> int:
+    raw = os.environ.get(MAX_STEPS_ENV)
+    if raw is None or raw.strip() == "":
+        return MAX_STEPS
+    try:
+        value = int(raw)
+    except ValueError:
+        value = 0
+    if value < 1:
+        print(
+            yellow(f"[경고] {MAX_STEPS_ENV}={raw!r}는 1 이상의 정수가 아니라 기본값 {MAX_STEPS}을 씁니다."),
+            file=sys.stderr,
+        )
+        return MAX_STEPS
+    return value
+
+
 def run_agent(
     task: str,
-    max_steps: int = MAX_STEPS,
+    max_steps: int | None = None,
     session_history: list[str] | None = None,
     confirm: Callable[[str], bool] | None = None,
 ) -> str:
+    if max_steps is None:
+        max_steps = resolve_max_steps()
     # 스킬 탐색은 루프 밖에서 한 번만 한다 — 프롬프트는 매 스텝 다시 만들지만, 디스크를
     # 매 스텝 훑을 이유는 없다. (본문은 어차피 여기서 안 읽고 load_skill이 그때 읽는다.)
     skills, skill_errors = discover_skills()
@@ -296,7 +318,10 @@ def run_agent(
             )
             history = _cap_history(history)
 
-        raise AgentLoopError(f"{max_steps}스텝 안에 최종 답변을 받지 못했습니다.")
+        raise AgentLoopError(
+            f"{max_steps}스텝 안에 최종 답변을 받지 못했습니다. "
+            f"더 필요하면 .env의 {MAX_STEPS_ENV}로 늘릴 수 있습니다."
+        )
     finally:
         # 진행 표시가 줄바꿈 없이 이어지므로, 어떻게 끝나든(성공/에러/스텝초과) 여기서
         # 줄을 닫아야 최종 결과나 에러가 점 뒤에 붙지 않는다.

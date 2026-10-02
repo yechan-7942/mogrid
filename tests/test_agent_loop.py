@@ -10,7 +10,9 @@ from agent_loop.loop import (
     build_system_prompt,
     claims_unverified_file_action,
     extract_json,
+    MAX_STEPS,
     requires_confirmation,
+    resolve_max_steps,
     run_agent,
 )
 from router.fallback import AllProvidersFailedError
@@ -274,6 +276,25 @@ class RunAgentTests(unittest.TestCase):
             with self.assertRaises(AgentLoopError):
                 run_agent("끝나지 않는 작업", max_steps=2)
         self.assertEqual(mock_call_llm.call_count, 2)
+
+    @patch("agent_loop.loop.call_llm")
+    def test_max_steps_env_overrides_default(self, mock_call_llm):
+        mock_call_llm.return_value = json.dumps({"tool": "list_files", "args": {}})
+        with patch.dict(os.environ, {"MOGRID_MAX_STEPS": "3"}):
+            with patch("agent_loop.loop.call_tool", return_value="ok"):
+                with self.assertRaises(AgentLoopError):
+                    run_agent("끝나지 않는 작업")
+        self.assertEqual(mock_call_llm.call_count, 3)
+
+    def test_invalid_max_steps_env_falls_back_to_default(self):
+        for raw in ("abc", "0", "-5"):
+            with patch.dict(os.environ, {"MOGRID_MAX_STEPS": raw}), patch("sys.stderr"):
+                self.assertEqual(resolve_max_steps(), MAX_STEPS)
+
+    def test_max_steps_default_when_env_unset(self):
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("MOGRID_MAX_STEPS", None)
+            self.assertEqual(resolve_max_steps(), MAX_STEPS)
 
     @patch("agent_loop.loop.call_llm")
     def test_response_without_tool_or_final_is_recoverable(self, mock_call_llm):
