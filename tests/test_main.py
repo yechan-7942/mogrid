@@ -165,6 +165,31 @@ class RunStatusTests(unittest.TestCase):
         self.assertIn("Groq", output)
         self.assertIn("3", output)
         self.assertIn("일부러 실패", output)
+        # last_failed 필드가 생기기 전의 옛 기록
+        self.assertIn("시각 미기록", output)
+
+    def _status_output(self, record):
+        import io
+        from contextlib import redirect_stdout
+
+        base = {"total_success": 1, "total_fail": 1, "today_success": 0, "today_fail": 0}
+        buf = io.StringIO()
+        with patch("main.load_usage", return_value={"nvidia": {**base, **record}}), redirect_stdout(buf):
+            run_status()
+        return buf.getvalue()
+
+    def test_failure_followed_by_success_is_marked_resolved(self):
+        output = self._status_output(
+            {"last_used": "2026-09-28T11:24:54", "last_failed": "2026-09-20T09:00:00", "last_error": "키 없음"}
+        )
+        self.assertIn("2026-09-20T09:00:00, 이후 정상 호출됨", output)
+
+    def test_failure_after_last_success_is_not_marked_resolved(self):
+        output = self._status_output(
+            {"last_used": "2026-09-20T09:00:00", "last_failed": "2026-09-28T11:24:54", "last_error": "키 없음"}
+        )
+        self.assertIn("2026-09-28T11:24:54", output)
+        self.assertNotIn("이후 정상 호출됨", output)
 
 
 class InteractiveConfirmTests(unittest.TestCase):

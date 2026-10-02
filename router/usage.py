@@ -29,6 +29,7 @@ def _empty_record() -> dict:
         "today_fail": 0,
         "last_used": None,
         "last_error": None,
+        "last_failed": None,
     }
 
 
@@ -85,6 +86,9 @@ def _record(provider: str, *, success: bool, error_text: str | None) -> None:
         record["total_fail"] += 1
         record["today_fail"] += 1
         record["last_error"] = error_text
+        # last_error는 다음 실패 전까지 남으므로, 시각이 없으면 이미 해결된 옛 실패인지
+        # 지금도 실패 중인지 구분할 수 없다.
+        record["last_failed"] = datetime.now().isoformat(timespec="seconds")
     data[provider] = record
 
     # 기록 실패는 실제 작업(LLM 호출)을 막을 이유가 없는 부가 기능이므로, 예외를

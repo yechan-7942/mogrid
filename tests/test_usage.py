@@ -78,6 +78,7 @@ class RecordSuccessAndFailureTests(UsageTestCase):
         self.assertEqual(data["groq"]["total_fail"], 1)
         self.assertEqual(data["groq"]["today_fail"], 1)
         self.assertEqual(data["groq"]["last_error"], "일부러 실패")
+        self.assertIsNotNone(data["groq"]["last_failed"])
 
     def test_multiple_calls_accumulate_for_same_provider(self):
         record_success("groq")

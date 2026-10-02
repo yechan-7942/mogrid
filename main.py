@@ -143,7 +143,14 @@ def run_status() -> int:
 
         print(f"[{green('사용됨')}] {label}: {today} / {total} (마지막 성공: {last_used})")
         if record.get("last_error"):
-            print(dim(f"    마지막 실패 사유: {record['last_error'][:200]}"))
+            last_failed = record.get("last_failed")
+            if not last_failed:
+                when = "시각 미기록"  # last_failed 필드가 생기기 전에 기록된 실패
+            elif record.get("last_used") and record["last_used"] > last_failed:
+                when = f"{last_failed}, 이후 정상 호출됨"
+            else:
+                when = last_failed
+            print(dim(f"    마지막 실패 사유 ({when}): {record['last_error'][:200]}"))
 
     print(dim("\n실제 provider 쪽 잔여 할당량이 아니라, mogrid를 거쳐 호출된 횟수입니다."))
     return 0
