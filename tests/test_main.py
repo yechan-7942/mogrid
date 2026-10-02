@@ -14,6 +14,7 @@ from main import (
     PROVIDER_SETUP,
     interactive_confirm,
     one_shot_confirm,
+    read_line,
     run_check_models,
     run_setup,
     run_status,
@@ -178,6 +179,17 @@ class InteractiveConfirmTests(unittest.TestCase):
     @patch("main.input", return_value="")
     def test_blank_returns_false(self, mock_input):
         self.assertFalse(interactive_confirm("위험한 작업"))
+
+
+class ReadLineTests(unittest.TestCase):
+    @patch("sys.stderr")
+    @patch(
+        "main.input",
+        side_effect=[UnicodeDecodeError("utf-8", b"\xec\xa7", 0, 2, "invalid continuation byte"), "작업"],
+    )
+    def test_invalid_utf8_reprompts_instead_of_crashing(self, mock_input, mock_stderr):
+        self.assertEqual(read_line("작업 > "), "작업")
+        self.assertEqual(mock_input.call_count, 2)
 
 
 class OneShotConfirmTests(unittest.TestCase):

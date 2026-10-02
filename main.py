@@ -24,6 +24,13 @@ from router.health_check import run_all_checks
 from router.usage import UsageError, load_usage
 from tools.skills import discover_skills, global_skills_dir, project_skills_dir
 
+try:
+    # import만 해도 input()이 readline 줄 편집을 쓴다. 없으면 터미널 기본 편집이
+    # 바이트 단위로 지워서, 한글(3바이트)에 백스페이스를 치면 깨진 바이트가 남는다.
+    import readline  # noqa: F401
+except ImportError:  # Windows 등 readline이 없는 환경
+    pass
+
 PROVIDER_SETUP = [
     ("GROQ_API_KEY", "Groq", "https://console.groq.com/keys"),
     ("GEMINI_API_KEY", "Gemini (Google AI Studio)", "https://aistudio.google.com/app/apikey"),
@@ -31,6 +38,16 @@ PROVIDER_SETUP = [
     ("MISTRAL_API_KEY", "Mistral", "https://console.mistral.ai/api-keys"),
     ("NVIDIA_API_KEY", "NVIDIA NIM", "https://build.nvidia.com/settings/api-keys"),
 ]
+
+
+def read_line(prompt: str) -> str:
+    # readline이 있어도 터미널/IME 조합에 따라 깨진 UTF-8이 들어올 수 있다.
+    # 그 줄은 이미 소비됐으므로 프로세스를 죽이지 말고 다시 입력받는다.
+    while True:
+        try:
+            return input(prompt)
+        except UnicodeDecodeError:
+            print(yellow("[경고] 입력에 깨진 글자가 섞여 있어 읽지 못했습니다. 다시 입력해 주세요."), file=sys.stderr)
 
 
 def run_setup() -> None:
@@ -50,7 +67,7 @@ def run_setup() -> None:
     for env_var, label, url in PROVIDER_SETUP:
         if os.getenv(env_var):
             answer = (
-                input(f"\n{label}({env_var})은 이미 설정되어 있다. 새로 발급받아 교체할까? (y/N): ")
+                read_line(f"\n{label}({env_var})은 이미 설정되어 있다. 새로 발급받아 교체할까? (y/N): ")
                 .strip()
                 .lower()
             )
@@ -160,7 +177,7 @@ def run_skills() -> int:
 
 
 def interactive_confirm(reason: str) -> bool:
-    answer = input(f"\n{yellow(bold('[확인 필요]'))} {reason}\n진행할까요? (y/N): ").strip().lower()
+    answer = read_line(f"\n{yellow(bold('[확인 필요]'))} {reason}\n진행할까요? (y/N): ").strip().lower()
     return answer == "y"
 
 
@@ -266,7 +283,7 @@ def run_interactive() -> None:
     session_history = load_session_safely()
     while True:
         try:
-            task = input(f"\n{bold(cyan('작업 >'))} ").strip()
+            task = read_line(f"\n{bold(cyan('작업 >'))} ").strip()
         except EOFError:
             print()
             break
