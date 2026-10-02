@@ -18,6 +18,10 @@ from tools.task_tracker import render_task_list, reset_tasks
 # tool. write_file은 새 파일 생성은 안전하지만 "이미 있는 파일을 덮어쓰는" 경우만 위험하므로
 # 별도로 검사한다.
 CONFIRM_REQUIRED_TOOLS = {"run_command"}
+# 1이면 대화형/한 번 실행 모드 모두에서 run_command를 묻지 않고 실행한다. 명령 확인이
+# 작업 중간마다 끼어들어 흐름이 끊기는 걸 막기 위한 것 — 기존 파일 덮어쓰기는 되돌리기
+# 어려워서 여기에 포함하지 않는다(그쪽은 MOGRID_AUTO_APPROVE/--yes가 담당).
+AUTO_APPROVE_COMMANDS_ENV = "MOGRID_AUTO_APPROVE_COMMANDS"
 
 MAX_STEPS = 25
 # run_command 등 tool 결과가 길어질 수 있어, session_history와 같은 이유로
@@ -190,6 +194,11 @@ def extract_json(text: str) -> dict:
 
 def requires_confirmation(tool_name: str, tool_args: dict) -> str | None:
     if tool_name in CONFIRM_REQUIRED_TOOLS:
+        if os.environ.get(AUTO_APPROVE_COMMANDS_ENV) == "1":
+            # 묻지는 않되 무엇을 실행하는지는 화면에 남긴다 — 사람이 보지 않은 명령이
+            # 조용히 실행되면 안 된다.
+            print(dim(f"[자동 승인] 명령 실행: {tool_args.get('command', '')}"), file=sys.stderr)
+            return None
         return f"명령 실행: {tool_args.get('command', '')}"
     if tool_name == "write_file":
         path = tool_args.get("path", "")

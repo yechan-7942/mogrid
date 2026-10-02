@@ -79,6 +79,19 @@ class RequiresConfirmationTests(unittest.TestCase):
         self.assertIsNotNone(reason)
         self.assertIn("git push", reason)
 
+    @patch("sys.stderr")
+    def test_run_command_auto_approved_by_env(self, mock_stderr):
+        with patch.dict(os.environ, {"MOGRID_AUTO_APPROVE_COMMANDS": "1"}):
+            self.assertIsNone(requires_confirmation("run_command", {"command": "npm test"}))
+
+    def test_auto_approve_commands_env_does_not_skip_overwrite_confirmation(self):
+        existing = os.path.join(self._tmpdir.name, "existing.txt")
+        open(existing, "w").close()
+        with patch.dict(os.environ, {"MOGRID_AUTO_APPROVE_COMMANDS": "1"}):
+            self.assertIsNotNone(
+                requires_confirmation("write_file", {"path": "existing.txt", "content": "x"})
+            )
+
     def test_write_file_to_new_path_does_not_require_confirmation(self):
         self.assertIsNone(
             requires_confirmation("write_file", {"path": "new.txt", "content": "x"})
